@@ -1,0 +1,14 @@
+[package]
+name = "munin-plugin"
+version = "0.1.0"
+edition = "2021"
+authors = ["Jörg Jaspert <joerg@debian.org>"]
+license = "LGPL-3.0-only"
+keywords = [ "munin", "munin-plugin" ]
+categories = [ "command-line-utilities", "development-tools" ]
+repository = "https://github.com/Ganneff/munin-plugin"
+description = "Ease writing of plugins for munin in Rust"
+
+[dependencies]
+anyhow = "1.0.57"
+log = "0.4.17"
