@@ -82,7 +82,17 @@
 //!     Ok(())
 //! }
 //! ```
+//!
+//! # Logging
+//! This crate uses the default [log] crate to output log messages of
+//! level trace or debug. No other levels will be used. If you want to
+//! see them, select a log framework you like and ensure its level
+//! will display trace/debug messages. See that frameworks
+//! documentation on how to setup/include it.
+//!
+//! If you do not want/need log output, just do nothing.
 
+// Tell us if we forget to document things
 #![warn(missing_docs)]
 
 pub mod config;
