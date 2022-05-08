@@ -12,3 +12,6 @@ description = "Ease writing of plugins for munin in Rust"
 [dependencies]
 anyhow = "1.0.57"
 log = "0.4.17"
+
+[dev-dependencies]
+procfs = "0.12.0"
