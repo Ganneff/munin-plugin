@@ -27,13 +27,8 @@
 //! struct LoadPlugin;
 //!
 //! impl MuninPlugin for LoadPlugin {
-//!     fn config(&self) -> Result<()> {
-//!         // We want to write a possibly large amount to stdout, take and lock it
-//!        let stdout = io::stdout();
-//!        let bufsize = 8192;
-//!        // Buffered writer, to gather multiple small writes together
-//!        let mut handle = BufWriter::with_capacity(bufsize, stdout.lock());
-//!
+//!     // Write out munin config. handle is setup as a bufwriter to stdout.
+//!     fn config<W: Write>(&self, handle: &mut BufWriter<W>) -> Result<()> {
 //!        writeln!(handle, "graph_title Load average")?;
 //!        writeln!(handle, "graph_args --base 1000 -l 0")?;
 //!        writeln!(handle, "graph_vlabel load")?;
@@ -44,8 +39,6 @@
 //!        writeln!(handle, "load.critical 120")?;
 //!        writeln!(handle, "graph_info The load average of the machine describes how many processes are in the run-queue (scheduled to run immediately.")?;
 //!        writeln!(handle, "load.info Average load for the five minutes.")?;
-//!        // And flush the handle, so it can also deal with possible errors
-//!        handle.flush()?;
 //!        Ok(())
 //!     }
 //!     fn fetch(&self) {
@@ -92,12 +85,15 @@ pub use crate::config::Config;
 
 use anyhow::{anyhow, Result};
 use log::{info, trace, warn};
-use std::env;
+use std::{
+    env,
+    io::{self, BufWriter, Write},
+};
 
 /// Document this trait
 pub trait MuninPlugin {
     /// Config
-    fn config(&self) -> Result<()>;
+    fn config<W: Write>(&self, handle: &mut BufWriter<W>) -> Result<()>;
 
     /// Run
     fn run(&self);
@@ -143,7 +139,14 @@ pub trait MuninPlugin {
             // Argument passed, check which one and act accordingly
             2 => match args[1].as_str() {
                 "config" => {
-                    self.config()?;
+                    // We want to write a possibly large amount to stdout, take and lock it
+                    let stdout = io::stdout();
+                    let bufsize = 8192;
+                    // Buffered writer, to gather multiple small writes together
+                    let mut handle = BufWriter::with_capacity(bufsize, stdout.lock());
+                    self.config(&mut handle)?;
+                    // And flush the handle, so it can also deal with possible errors
+                    handle.flush()?;
                     // If munin supports dirtyconfig, send the data now
                     if config.dirtyconfig {
                         trace!("Munin supports dirtyconfig, sending data now");

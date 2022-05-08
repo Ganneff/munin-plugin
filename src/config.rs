@@ -33,6 +33,13 @@ pub struct Config {
     /// [Config::new] will set it to
     /// [Config::plugin_statedir]/[Config::plugin_name].pid
     pub pidfile: PathBuf,
+
+    /// Size of buffer for BufWriter for [MuninPlugin::config](super::MuninPlugin::config).
+    ///
+    /// Defaults to 8192, but if the plugin outputs huge munin
+    /// configuration (trivial with multigraph plugins), you may want
+    /// to increase this.
+    pub cfgsize: usize,
 }
 
 impl Config {
@@ -73,6 +80,7 @@ impl Default for Config {
             },
             daemonize: false,
             pidfile: statedir.join("munin-plugin.pid"),
+            cfgsize: 8192,
         }
     }
 }
