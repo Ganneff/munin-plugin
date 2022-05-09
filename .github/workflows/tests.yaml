@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: Run ${{ matrix.jobs.name }} with Rust ${{ matrix.rust }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        rust: [stable]
+        jobs:
+          - name: Clippy
+            task: cargo clippy --workspace --all-targets --verbose
+          - name: tests
+            task: cargo test --workspace --verbose
+          - name: fmt
+            task: cargo fmt --all -- --check
+        include:
+          - name: Clippy
+            env:
+              RUSTFLAGS: -Dwarnings
+    steps:
+      - uses: actions/checkout@v2
+      - name: Prepare Rust
+        uses: hecrj/setup-rust-action@v1
+        with:
+          rust-version: ${{ matrix.rust }}
+          components: clippy, rustfmt
+      - name: Cache cargo registry
+        uses: actions/cache@v2
+        continue-on-error: false
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+      - name: Run task ${{ matrix.jobs.name }}
+        run: ${{ matrix.jobs.task }}
+  
+  coverage:
+    name: Tarpaulin coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+      - name: Install stable toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - name: Run cargo-tarpaulin
+        uses: actions-rs/tarpaulin@v0.1
+      - name: Upload to codecov.io
+        uses: codecov/codecov-action@v2
+        with:
+          token: ${{secrets.CODECOV_TOKEN}}
+          fail_ci_if_error: false
+          verbose: true
+      - name: Archive code coverage results
+        uses: actions/upload-artifact@v1
+        with:
+          name: code-coverage-report
+          path: cobertura.xml
