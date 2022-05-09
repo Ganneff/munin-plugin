@@ -22,8 +22,6 @@ jobs:
         os: [ubuntu-latest]
         rust: [stable]
         jobs:
-          - name: Clippy
-            task: cargo clippy --workspace --all-targets --verbose
           - name: tests
             task: cargo test --workspace --verbose
           - name: fmt
@@ -49,6 +47,10 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
+      - uses: actions-rs/clippy-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --all-features
       - name: Run task ${{ matrix.jobs.name }}
         run: ${{ matrix.jobs.task }}
   
