@@ -184,6 +184,20 @@ pub trait MuninPlugin {
         }
     }
 
+    /// A simplified start, only need a name, for the rest, defaults are fine.
+    ///
+    /// This is just a tiny bit of "being lazy is good" and will
+    /// create the [MuninPlugin::config] with the given name, then
+    /// call the real start function.
+    fn simple_start(&self, name: String) -> Result<bool> {
+        trace!("Simple Start, setting up config");
+        let config = Config::new(name);
+        trace!("Plugin: {:#?}", config);
+
+        self.start(config)?;
+        Ok(true)
+    }
+
     /// The main plugin function, this will deal with parsing
     /// commandline arguments and doing what is expected of the plugin
     /// (present config, fetch values, whatever).
