@@ -11,3 +11,4 @@ More content coming soon, for now read [docs.rs](https://docs.rs/munin-plugin/la
 ![LGPL-3.0 licensed](https://img.shields.io/github/license/Ganneff/munin-plugin)
 ![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/Ganneff/munin-plugin)
 [![GitHub issues](https://img.shields.io/github/issues/Ganneff/munin-plugin)](https://github.com/Ganneff/munin-plugin/issues)
+![Codecov](https://img.shields.io/codecov/c/github/Ganneff/munin-plugin)
