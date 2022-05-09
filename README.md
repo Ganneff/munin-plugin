@@ -11,4 +11,4 @@ More content coming soon, for now read [docs.rs](https://docs.rs/munin-plugin/la
 [![LGPL-3.0 licensed](https://img.shields.io/github/license/Ganneff/munin-plugin)](https://github.com/Ganneff/munin-plugin/blob/main/LICENSE.md)
 ![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/Ganneff/munin-plugin)
 [![GitHub issues](https://img.shields.io/github/issues/Ganneff/munin-plugin)](https://github.com/Ganneff/munin-plugin/issues)
-[![codecov](https://codecov.io/gh/Ganneff/tm/branch/main/graph/badge.svg?token=KeiO6hIIJQ)](https://codecov.io/gh/Ganneff/munin-plugin)
+[![codecov](https://codecov.io/gh/Ganneff/munin-plugin/branch/main/graph/badge.svg)](https://codecov.io/gh/Ganneff/munin-plugin)
