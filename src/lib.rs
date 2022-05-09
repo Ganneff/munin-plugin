@@ -113,11 +113,11 @@ pub trait MuninPlugin {
     ///
     /// Note that munin expects this to appear on stdout, so the
     /// plugin gives you a handle to write to, which is setup as a
-    /// BufWriter to stdout. The BufWriter size defaults to 8192
-    /// bytes, but if you need more, its size can be set using
-    /// [Config::cfgsize]. An example where this may be useful is a
-    /// munin multigraph plugin that outputs config for 20 or more
-    /// different graphs.
+    /// [std::io::BufWriter] to stdout. The [std::io::BufWriter]
+    /// capacity defaults to 8192 bytes, but if you need more, its
+    /// size can be set using [Config::cfgsize]. An example where this
+    /// may be useful is a munin multigraph plugin that outputs config
+    /// for a many graphs.
     ///
     /// # Example
     /// ```rust
@@ -159,7 +159,15 @@ pub trait MuninPlugin {
     /// Acquire
     fn acquire(&self);
 
-    /// Fetch
+    /// Fetch delivers actual data to munin. This is called whenever
+    /// the plugin is called without an argument. If the
+    /// [config::Config::dirtyconfig] setting is true (auto-detected from
+    /// environment set by munin), this will also be called right
+    /// after having called [MuninPlugin::config].
+    ///
+    /// For a simple plugin, this may gather data and just print it to
+    /// stdout in a format that munin accepts. A plugin that
+    /// daemonizes itself may just write out the cached data here.
     fn fetch(&self);
 
     /// Check autoconf
@@ -176,7 +184,9 @@ pub trait MuninPlugin {
         }
     }
 
-    /// Start
+    /// The main plugin function, this will deal with parsing
+    /// commandline arguments and doing what is expected of the plugin
+    /// (present config, fetch values, whatever).
     fn start(&self, config: Config) -> Result<bool> {
         trace!("Plugin start");
         trace!("My plugin config: {config:#?}");
