@@ -40,6 +40,12 @@ pub struct Config {
     /// configuration (trivial with multigraph plugins), you may want
     /// to increase this.
     pub cfgsize: usize,
+
+    /// Size of buffer for BufWriter for [MuninPlugin::fetch](super::MuninPlugin::fetch).
+    ///
+    /// Defaults to 8192, but if the plugin outputs large datasets, it
+    /// is useful to increase this.
+    pub fetchsize: usize,
 }
 
 impl Config {
@@ -81,6 +87,7 @@ impl Default for Config {
             daemonize: false,
             pidfile: statedir.join("munin-plugin.pid"),
             cfgsize: 8192,
+            fetchsize: 8192,
         }
     }
 }

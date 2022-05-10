@@ -46,9 +46,10 @@
 //!     }
 //!
 //!     // Fetch and display data
-//!     fn fetch(&self) {
+//!     fn fetch<W: Write>(&self, handle: &mut BufWriter<W>) -> Result<()> {
 //!         let load = (LoadAverage::new().unwrap().five * 100.0) as isize;
-//!         println!("load.value {}", load);
+//!         writeln!(handle, "load.value {}", load);
+//!         Ok(())
 //!     }
 //!
 //!     // This plugin does not need any setup and will just work, so
@@ -132,7 +133,7 @@ pub trait MuninPlugin {
     /// # fn run(&self) { todo!() }
     /// # fn daemonize(&self) { todo!() }
     /// # fn acquire(&self) { todo!() }
-    /// # fn fetch(&self) { todo!() }
+    /// # fn fetch<W: Write>(&self, handle: &mut BufWriter<W>) -> Result<()> { todo!() }
     /// fn config<W: Write>(&self, handle: &mut BufWriter<W>) -> Result<()> {
     ///     writeln!(handle, "graph_title Load average")?;
     ///     writeln!(handle, "graph_args --base 1000 -l 0")?;
@@ -165,10 +166,35 @@ pub trait MuninPlugin {
     /// environment set by munin), this will also be called right
     /// after having called [MuninPlugin::config].
     ///
-    /// For a simple plugin, this may gather data and just print it to
-    /// stdout in a format that munin accepts. A plugin that
-    /// daemonizes itself may just write out the cached data here.
-    fn fetch(&self);
+    /// A simple plugin may just gather data here too and then write it to the handle.
+    /// A plugin that daemonizes will gather data in [MuninPlugin::acquire] and cache
+    /// that in one or more cachefiles and just push it all to the handle (possibly using [std::io::copy]).
+    ///
+    /// The size of the BufWriter is configurable from [Config::fetchsize].
+    ///
+    /// # Example
+    /// ```rust
+    /// # use munin_plugin::*;
+    /// # use anyhow::{anyhow, Result};
+    /// # use std::{
+    /// # env,
+    /// # io::{self, BufWriter, Write},
+    /// # };
+    /// use procfs::LoadAverage;
+    /// # struct LoadPlugin;
+    /// # impl MuninPlugin for LoadPlugin {
+    /// # fn run(&self) { todo!() }
+    /// # fn daemonize(&self) { todo!() }
+    /// # fn acquire(&self) { todo!() }
+    /// # fn config<W: Write>(&self, handle: &mut BufWriter<W>) -> Result<()> { todo!() }
+    /// fn fetch<W: Write>(&self, handle: &mut BufWriter<W>) -> Result<()> {
+    ///     let load = (LoadAverage::new().unwrap().five * 100.0) as isize;
+    ///     writeln!(handle, "load.value {}", load)?;
+    ///     Ok(())
+    /// }
+    /// # }
+    /// ```
+    fn fetch<W: Write>(&self, handle: &mut BufWriter<W>) -> Result<()>;
 
     /// Check autoconf
     fn check_autoconf(&self) -> bool {
@@ -212,7 +238,13 @@ pub trait MuninPlugin {
         match args.len() {
             // no arguments passed, print data
             1 => {
-                self.fetch();
+                // We want to write a possibly large amount to stdout, take and lock it
+                let stdout = io::stdout();
+                // Buffered writer, to gather multiple small writes together
+                let mut handle = BufWriter::with_capacity(config.fetchsize, stdout.lock());
+                self.fetch(&mut handle)?;
+                // And flush the handle, so it can also deal with possible errors
+                handle.flush()?;
                 return Ok(true);
             }
             // Argument passed, check which one and act accordingly
@@ -220,15 +252,20 @@ pub trait MuninPlugin {
                 "config" => {
                     // We want to write a possibly large amount to stdout, take and lock it
                     let stdout = io::stdout();
-                    // Buffered writer, to gather multiple small writes together
-                    let mut handle = BufWriter::with_capacity(config.cfgsize, stdout.lock());
-                    self.config(&mut handle)?;
-                    // And flush the handle, so it can also deal with possible errors
-                    handle.flush()?;
+                    {
+                        // Buffered writer, to gather multiple small writes together
+                        let mut handle = BufWriter::with_capacity(config.cfgsize, stdout.lock());
+                        self.config(&mut handle)?;
+                        // And flush the handle, so it can also deal with possible errors
+                        handle.flush()?;
+                    }
                     // If munin supports dirtyconfig, send the data now
                     if config.dirtyconfig {
                         trace!("Munin supports dirtyconfig, sending data now");
-                        self.fetch();
+                        let mut handle = BufWriter::with_capacity(config.fetchsize, stdout.lock());
+                        self.fetch(&mut handle)?;
+                        // And flush the handle, so it can also deal with possible errors
+                        handle.flush()?;
                     }
                     return Ok(true);
                 }
