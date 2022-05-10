@@ -123,7 +123,7 @@ mod tests {
         // Is plugin name as given?
         assert_eq!(config2.plugin_name, String::from("Lala"));
         // Defaults as expected?
-        assert_eq!(config2.daemonize, false);
+        assert!(!config2.daemonize);
         assert_eq!(config2.fetchsize, 8192);
 
         config2.pidfile = PathBuf::new();

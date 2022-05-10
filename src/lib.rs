@@ -58,16 +58,10 @@
 //!         true
 //!     }
 //!
-//!     // The other functions are not needed for a simple plugin that
+//!     // The acquire function is not needed for a simple plugin that
 //!     // only gathers data every 5 minutes (munin standard), but the
-//!     // trait requires stubs to be there.
-//!     fn run(&self) {
-//!         unimplemented!()
-//!     }
-//!     fn daemonize(&self) {
-//!         unimplemented!()
-//!     }
-//!     fn acquire(&self) {
+//!     // trait requires a stub to be there.
+//!     fn acquire(&mut self, config: &Config) -> Result<()> {
 //!         unimplemented!()
 //!     }
 //! }
@@ -75,7 +69,7 @@
 //! // The actual program start point
 //! fn main() -> Result<()> {
 //!     // Get our Plugin
-//!     let load = LoadPlugin;
+//!     let mut load = LoadPlugin;
 //!     // And let it do the work.
 //!     load.simple_start(String::from("load"))?;
 //!     Ok(())
@@ -100,10 +94,24 @@ pub mod config;
 pub use crate::config::Config;
 
 use anyhow::{anyhow, Result};
-use log::{info, trace, warn};
+// daemonize
+use daemonize::Daemonize;
+// daemonize
+use fs2::FileExt;
+use log::{trace, warn};
+// daemonize
+use spin_sleep::LoopHelper;
 use std::{
     env,
     io::{self, BufWriter, Write},
+    path::Path,
+};
+// daemonize
+use std::{
+    fs::File,
+    process::{Command, Stdio},
+    thread,
+    time::Duration,
 };
 
 /// Defines a Munin Plugin and the needed functions
@@ -130,9 +138,7 @@ pub trait MuninPlugin {
     /// # };
     /// # struct LoadPlugin;
     /// # impl MuninPlugin for LoadPlugin {
-    /// # fn run(&self) { todo!() }
-    /// # fn daemonize(&self) { todo!() }
-    /// # fn acquire(&self) { todo!() }
+    /// # fn acquire(&mut self, config: &Config) -> Result<()> { todo!() }
     /// # fn fetch<W: Write>(&self, handle: &mut BufWriter<W>) -> Result<()> { todo!() }
     /// fn config<W: Write>(&self, handle: &mut BufWriter<W>) -> Result<()> {
     ///     writeln!(handle, "graph_title Load average")?;
@@ -151,14 +157,45 @@ pub trait MuninPlugin {
     /// ```
     fn config<W: Write>(&self, handle: &mut BufWriter<W>) -> Result<()>;
 
-    /// Run
-    fn run(&self);
+    /// Acquire data and store it for later fetching.
+    ///
+    /// Acquire is called from [MuninPlugin::daemon] once every second
+    /// and is expected to do whatever is neccessary to gather the
+    /// data, the plugin is supposed to gather. It should then store
+    /// it somewhere, where [MuninPlugin::fetch] can read it.
+    /// [MuninPlugin::fetch] will be called from munin-node (usually)
+    /// every 5 minutes and is expected to output data to stdout, in a
+    /// munin compatible way.
+    fn acquire(&mut self, config: &Config) -> Result<()>;
 
     /// Daemonize
-    fn daemonize(&self);
+    ///
+    /// This function will daemonize the process and then start a
+    /// loop, run once a second, calling [MuninPlugin::acquire].
+    fn daemon(&mut self, config: &Config) -> Result<()> {
+        // We want to run as daemon, so prepare
+        let daemonize = Daemonize::new()
+            .pid_file(&config.pidfile)
+            .chown_pid_file(true)
+            .working_directory("/tmp");
 
-    /// Acquire
-    fn acquire(&self);
+        // And off into the background we go
+        daemonize.start()?;
+
+        // The loop helper makes it easy to repeat a loop once a second
+        let mut loop_helper = LoopHelper::builder().build_with_target_rate(1); // Only once a second
+
+        // We run forever
+        loop {
+            // Let loop helper prepare
+            loop_helper.loop_start();
+
+            self.acquire(config)?;
+
+            // Sleep for the rest of the second
+            loop_helper.loop_sleep();
+        }
+    }
 
     /// Fetch delivers actual data to munin. This is called whenever
     /// the plugin is called without an argument. If the
@@ -172,7 +209,7 @@ pub trait MuninPlugin {
     ///
     /// The size of the BufWriter is configurable from [Config::fetchsize].
     ///
-    /// # Example
+    /// # Example 1 - Simple: Calculate some data, output
     /// ```rust
     /// # use munin_plugin::*;
     /// # use anyhow::{anyhow, Result};
@@ -183,9 +220,7 @@ pub trait MuninPlugin {
     /// use procfs::LoadAverage;
     /// # struct LoadPlugin;
     /// # impl MuninPlugin for LoadPlugin {
-    /// # fn run(&self) { todo!() }
-    /// # fn daemonize(&self) { todo!() }
-    /// # fn acquire(&self) { todo!() }
+    /// # fn acquire(&mut self, config: &Config) -> Result<()> { todo!() }
     /// # fn config<W: Write>(&self, handle: &mut BufWriter<W>) -> Result<()> { todo!() }
     /// fn fetch<W: Write>(&self, handle: &mut BufWriter<W>) -> Result<()> {
     ///     let load = (LoadAverage::new().unwrap().five * 100.0) as isize;
@@ -230,8 +265,9 @@ pub trait MuninPlugin {
     ///
     /// This is just a tiny bit of "being lazy is good" and will
     /// create the [MuninPlugin::config] with the given name, then
-    /// call the real start function.
-    fn simple_start(&self, name: String) -> Result<bool> {
+    /// call the real start function. Only useful for plugins that do
+    /// not use daemonization.
+    fn simple_start(&mut self, name: String) -> Result<bool> {
         trace!("Simple Start, setting up config");
         let config = Config::new(name);
         trace!("Plugin: {:#?}", config);
@@ -243,7 +279,7 @@ pub trait MuninPlugin {
     /// The main plugin function, this will deal with parsing
     /// commandline arguments and doing what is expected of the plugin
     /// (present config, fetch values, whatever).
-    fn start(&self, config: Config) -> Result<bool> {
+    fn start(&mut self, config: Config) -> Result<bool> {
         trace!("Plugin start");
         trace!("My plugin config: {config:#?}");
 
@@ -254,13 +290,44 @@ pub trait MuninPlugin {
         match args.len() {
             // no arguments passed, print data
             1 => {
+                trace!("No argument, assuming fetch");
+                // For daemonization we need to check if a copy of us
+                // already runs. We do this by trying to lock our
+                // pidfile. If that works, nothing is running, then we
+                // need to start us in the background.
+                if config.daemonize {
+                    let lockfile = !Path::exists(&config.pidfile) || {
+                        let lockedfile =
+                            File::open(&config.pidfile).expect("Could not open pidfile");
+                        lockedfile.try_lock_exclusive().is_ok()
+                    };
+                    // If we could lock, it appears that acquire isn't running. Start it.
+                    if lockfile {
+                        trace!("Could lock the pidfile, will spawn acquire now");
+                        Command::new(&args[0])
+                            .arg("acquire")
+                            .stdin(Stdio::null())
+                            .stdout(Stdio::null())
+                            .stderr(Stdio::null())
+                            .spawn()
+                            .expect("failed to execute acquire");
+                        trace!("Spawned, sleep for 1s, then continue");
+                        // Now we wait one second before going on, so the
+                        // newly spawned process had a chance to generate us
+                        // some data
+                        thread::sleep(Duration::from_secs(1));
+                    }
+                }
+                trace!("Calling fetch");
                 // We want to write a possibly large amount to stdout, take and lock it
                 let stdout = io::stdout();
                 // Buffered writer, to gather multiple small writes together
                 let mut handle = BufWriter::with_capacity(config.fetchsize, stdout.lock());
                 self.fetch(&mut handle)?;
+                trace!("Done");
                 // And flush the handle, so it can also deal with possible errors
                 handle.flush()?;
+
                 return Ok(true);
             }
             // Argument passed, check which one and act accordingly
@@ -289,7 +356,21 @@ pub trait MuninPlugin {
                     self.autoconf();
                     return Ok(true);
                 }
-                &_ => info!("Found an argument: {}", args[1]),
+                "acquire" => {
+                    trace!("Called acquire to gather data");
+                    // Only will ever process anything after this line, if
+                    // one process has our pidfile already locked, ie. if
+                    // another acquire is running. (Or if we can not
+                    // daemonize for another reason).
+                    if let Err(e) = self.daemon(&config) {
+                        return Err(anyhow!(
+                            "Could not start plugin {} in daemon mode to gather data: {}",
+                            config.plugin_name,
+                            e
+                        ));
+                    };
+                }
+                &_ => trace!("Unsupported argument: {}", args[1]),
             },
             // Whatever else
             _ => return Err(anyhow!("No argument given")),
@@ -319,13 +400,7 @@ mod tests {
         fn check_autoconf(&self) -> bool {
             true
         }
-        fn run(&self) {
-            unimplemented!()
-        }
-        fn daemonize(&self) {
-            unimplemented!()
-        }
-        fn acquire(&self) {
+        fn acquire(&mut self, _config: &Config) -> Result<()> {
             unimplemented!()
         }
     }

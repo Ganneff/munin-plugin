@@ -1,6 +1,6 @@
 [package]
 name = "munin-plugin"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2021"
 authors = ["Jörg Jaspert <joerg@debian.org>"]
 license = "LGPL-3.0-only"
@@ -11,7 +11,10 @@ description = "Ease writing of plugins for munin in Rust"
 
 [dependencies]
 anyhow = "1.0.57"
+daemonize = "0.4.1"
+fs2 = "0.4.3"
 log = "0.4.17"
+spin_sleep = "1.1.1"
 
 [dev-dependencies]
 procfs = "0.12.0"
