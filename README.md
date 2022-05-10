@@ -12,3 +12,8 @@ More content coming soon, for now read [docs.rs](https://docs.rs/munin-plugin/la
 ![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/Ganneff/munin-plugin)
 [![GitHub issues](https://img.shields.io/github/issues/Ganneff/munin-plugin)](https://github.com/Ganneff/munin-plugin/issues)
 [![codecov](https://codecov.io/gh/Ganneff/munin-plugin/branch/main/graph/badge.svg)](https://codecov.io/gh/Ganneff/munin-plugin)
+
+# Semantic Versioning
+This library will follow [Semantic Versioning](https://semver.org/),
+that is - until release 1.0.0, anything may change, be prepared to
+adjust your code.
