@@ -74,12 +74,10 @@
 //!
 //! // The actual program start point
 //! fn main() -> Result<()> {
-//!     // Setup our config, needs our name, rest the defaults will work.
-//!     let config = Config::new("load".to_string());
 //!     // Get our Plugin
 //!     let load = LoadPlugin;
 //!     // And let it do the work.
-//!     load.start(config)?;
+//!     load.simple_start(String::from("load"))?;
 //!     Ok(())
 //! }
 //! ```
@@ -287,30 +285,73 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
 
+    // Our plugin struct
+    #[derive(Debug)]
+    struct TestPlugin;
+    impl MuninPlugin for TestPlugin {
+        fn config<W: Write>(&self, handle: &mut BufWriter<W>) -> Result<()> {
+            writeln!(handle, "This is a test plugin")?;
+            writeln!(handle, "There is no config")?;
+            Ok(())
+        }
+        fn fetch<W: Write>(&self, handle: &mut BufWriter<W>) -> Result<()> {
+            writeln!(handle, "This is a value")?;
+            writeln!(handle, "And one more value")?;
+            Ok(())
+        }
+        fn check_autoconf(&self) -> bool {
+            true
+        }
+        fn run(&self) {
+            unimplemented!()
+        }
+        fn daemonize(&self) {
+            unimplemented!()
+        }
+        fn acquire(&self) {
+            unimplemented!()
+        }
+    }
+
     #[test]
     fn test_config() {
-        // Whole set of defaults
-        let config = config::Config {
-            ..Default::default()
-        };
+        let test = TestPlugin;
+
+        // We want to check the output of config contains our test string
+        // above, so have it "write" it to a variable, then check if
+        // the variable contains what we want
+        let checktext = Vec::new();
+        let mut handle = BufWriter::new(checktext);
+        test.config(&mut handle).unwrap();
+        handle.flush().unwrap();
+
+        // And now check what got "written" into the variable
+        let (recovered_writer, _buffered_data) = handle.into_parts();
+        let output = String::from_utf8(recovered_writer).unwrap();
         assert_eq!(
-            config.plugin_name,
-            String::from("Simple munin plugin in Rust")
+            output,
+            String::from("This is a test plugin\nThere is no config\n")
         );
+    }
 
-        // Use defaults (except for name)
-        let mut config2 = config::Config {
-            plugin_name: String::from("Lala"),
-            ..Default::default()
-        };
-        assert_eq!(config2.plugin_name, String::from("Lala"));
-        assert_eq!(config2.daemonize, false);
+    #[test]
+    fn test_fetch() {
+        let test = TestPlugin;
 
-        config2.pidfile = PathBuf::new();
-        config2.pidfile.push(&config2.plugin_statedir);
-        config2.pidfile.push(String::from("Lala.pid"));
+        // We want to check the output of config contains our test string
+        // above, so have it "write" it to a variable, then check if
+        // the variable contains what we want
+        let checktext = Vec::new();
+        let mut handle = BufWriter::new(checktext);
+        test.fetch(&mut handle).unwrap();
+        handle.flush().unwrap();
 
-        let config3 = config::Config::new(String::from("Lala"));
-        assert_eq!(config2, config3);
+        // And now check what got "written" into the variable
+        let (recovered_writer, _buffered_data) = handle.into_parts();
+        let output = String::from_utf8(recovered_writer).unwrap();
+        assert_eq!(
+            output,
+            String::from("This is a value\nAnd one more value\n")
+        );
     }
 }

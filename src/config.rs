@@ -91,3 +91,39 @@ impl Default for Config {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn test_modconfig() {
+        // Whole set of defaults
+        let config = Config {
+            ..Default::default()
+        };
+        assert_eq!(
+            config.plugin_name,
+            String::from("Simple munin plugin in Rust")
+        );
+
+        // Use defaults (except for name)
+        let mut config2 = Config {
+            plugin_name: String::from("Lala"),
+            ..Default::default()
+        };
+        // Is plugin name as given?
+        assert_eq!(config2.plugin_name, String::from("Lala"));
+        // Defaults as expected?
+        assert_eq!(config2.daemonize, false);
+        assert_eq!(config2.fetchsize, 8192);
+
+        config2.pidfile = PathBuf::new();
+        config2.pidfile.push(&config2.plugin_statedir);
+        config2.pidfile.push(String::from("Lala.pid"));
+
+        let config3 = Config::new(String::from("Lala"));
+        assert_eq!(config2, config3);
+    }
+}
