@@ -17,3 +17,40 @@ More content coming soon, for now read [docs.rs](https://docs.rs/munin-plugin/la
 This library will follow [Semantic Versioning](https://semver.org/),
 that is - until release 1.0.0, anything may change, be prepared to
 adjust your code.
+
+# Security
+While I try not to put too many bugs in, there is no guarantee. I
+avoid writing unsafe Rust code myself, so Rust will safe me from some
+bugs, but crates I use most probably use unsafe.
+
+If you find bugs (security or not), I'm always happy about reports or
+even patches to fix them.
+
+## Cargo Geiger Safety Report
+```
+
+Metric output format: x/y
+    x = unsafe code used by the build
+    y = total unsafe code found in the crate
+
+Symbols:
+    🔒  = No `unsafe` usage found, declares #![forbid(unsafe_code)]
+    ❓  = No `unsafe` usage found, missing #![forbid(unsafe_code)]
+    ☢️  = `unsafe` usage found
+
+Functions  Expressions  Impls  Traits  Methods  Dependency
+
+0/0        0/0          0/0    0/0     0/0      🔒  munin-plugin 0.1.5
+15/18      442/449      3/3    0/0     11/11    ☢️  ├── anyhow 1.0.57
+13/13      189/193      0/0    0/0     0/0      ☢️  ├── daemonize 0.4.1
+0/0        0/0          0/0    0/0     0/0      ❓  │   ├── boxfnonce 0.1.1
+0/21       12/368       0/2    0/0     2/40     ☢️  │   └── libc 0.2.125
+0/0        52/157       0/0    0/0     0/0      ☢️  ├── fs2 0.4.3
+0/21       12/368       0/2    0/0     2/40     ☢️  │   └── libc 0.2.125
+1/1        16/18        1/1    0/0     0/0      ☢️  ├── log 0.4.17
+0/0        0/0          0/0    0/0     0/0      ❓  │   └── cfg-if 1.0.0
+0/0        15/15        0/0    0/0     0/0      ☢️  └── spin_sleep 1.1.1
+
+29/53      726/1200     4/6    0/0     13/51
+
+```

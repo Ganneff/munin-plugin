@@ -93,6 +93,8 @@
 
 // Tell us if we forget to document things
 #![warn(missing_docs)]
+// We do not want to write unsafe code
+#![forbid(unsafe_code)]
 
 pub mod config;
 pub use crate::config::Config;

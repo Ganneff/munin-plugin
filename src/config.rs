@@ -1,4 +1,8 @@
 //! Config data for a munin plugin
+
+// We do not want to write unsafe code
+#![forbid(unsafe_code)]
+
 use log::trace;
 use std::{env, path::PathBuf};
 
