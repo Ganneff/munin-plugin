@@ -196,12 +196,28 @@ pub trait MuninPlugin {
     /// ```
     fn fetch<W: Write>(&self, handle: &mut BufWriter<W>) -> Result<()>;
 
-    /// Check autoconf
+    /// Check whatever is neccessary to decide if the plugin can
+    /// auto-configure itself.
+    ///
+    /// For example a network load plugin may check if network
+    /// interfaces exists and then return true, something presenting
+    /// values of a daemon like apache or ntp may check if that is
+    /// installed - and possibly if fetching values is possible.
+    ///
+    /// If this function is not overwritten, it defaults to false.
     fn check_autoconf(&self) -> bool {
         false
     }
 
-    /// Autoconf
+    /// Tell munin if the plugin supports autoconf.
+    ///
+    /// Munin expects a simple yes or no on stdout, so we just print
+    /// it, depending on the return value of
+    /// [MuninPlugin::check_autoconf]. The default of that is a plain
+    /// false. If it is possible for your plugin to detect, if it can
+    /// autoconfigure itself, then implement the logic in
+    /// [MuninPlugin::check_autoconf] and have it return true.
+    #[cfg(not(tarpaulin_include))]
     fn autoconf(&self) {
         if self.check_autoconf() {
             println!("yes")
@@ -285,7 +301,6 @@ pub trait MuninPlugin {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
 
     // Our plugin struct
     #[derive(Debug)]
