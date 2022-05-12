@@ -77,7 +77,10 @@ impl Config {
 
 /// Useful defaults, if possible based on munin environment.
 impl Default for Config {
-    /// Set default values, try to read munin environment variables to fill [Config::plugin_statedir] and [Config::dirtyconfig]. [Config::plugin_statedir] falls back to _/tmp_ if no munin environment variables are present.
+    /// Set default values, try to read munin environment variables to
+    /// fill [Config::plugin_statedir] and [Config::dirtyconfig].
+    /// [Config::plugin_statedir] falls back to _/tmp_ if no munin
+    /// environment variables are present.
     fn default() -> Self {
         let statedir =
             PathBuf::from(env::var("MUNIN_PLUGSTATE").unwrap_or_else(|_| String::from("/tmp")));
