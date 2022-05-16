@@ -9,6 +9,7 @@
 //!
 //! # Repository / plugin using this code
 //! - [Simple munin plugin to graph load](https://github.com/Ganneff/munin-load)
+//! - [Munin CPU graph with 1second resolution](https://github.com/Ganneff/cpu1sec/)
 //!
 //! # Usage
 //! To implement a standard munin plugin, which munin runs every 5 minutes when fetching data, you load this library, create an empty struct named for your plugin and then implement `MuninPlugin` for your struct. You need to write out the functions `config` and `fetch`, the rest can have the magic `unimplemented!()`, and you call start() on your Plugin.
