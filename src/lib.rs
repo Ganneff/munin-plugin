@@ -130,6 +130,9 @@ pub trait MuninPlugin {
     /// may be useful is a munin multigraph plugin that outputs config
     /// for a many graphs.
     ///
+    /// # When
+    /// This function is needed for every plugin.
+    ///
     /// # Example
     /// ```rust
     /// # pub use munin_plugin::*;
@@ -168,6 +171,13 @@ pub trait MuninPlugin {
     /// [MuninPlugin::fetch] will be called from munin-node (usually)
     /// every 5 minutes and is expected to output data to stdout, in a
     /// munin compatible way.
+    ///
+    /// # When
+    /// This function is only needed if [Config::daemonize] is true.
+    /// Simple plugins that are run every 5 minutes only by munin, and
+    /// do not gather data in the meantime, do not need to implement
+    /// it. For such plugins provide a stub (as seen on this docs main
+    /// page) that says ```unimplemented!()```.
     ///
     /// # Example
     /// ```rust
@@ -261,6 +271,12 @@ pub trait MuninPlugin {
     /// that in one or more cachefiles and just push it all to the handle (possibly using [std::io::copy]).
     ///
     /// The size of the BufWriter is configurable from [Config::fetchsize].
+    ///
+    /// # When
+    /// This function is needed for every plugin, simple plugins may
+    /// directly get the data in here and then write it to the handle,
+    /// while those that daemonize will typically write out the
+    /// contents of their cache file.
     ///
     /// # Example 1 - Simple: Calculate some data, output
     /// ```rust
