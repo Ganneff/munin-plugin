@@ -1,6 +1,6 @@
 [package]
 name = "munin-plugin"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2021"
 authors = ["Jörg Jaspert <joerg@debian.org>"]
 license = "LGPL-3.0-only"
@@ -18,3 +18,4 @@ spin_sleep = "1.1.1"
 
 [dev-dependencies]
 procfs = "0.12.0"
+tempfile = "3.3.0"

@@ -10,6 +10,7 @@
 //! # Repository / plugin using this code
 //! - [Simple munin plugin to graph load](https://github.com/Ganneff/munin-load)
 //! - [Munin CPU graph with 1second resolution](https://github.com/Ganneff/cpu1sec/)
+//! - [Munin Interface graph with 1second resolution](https://github.com/Ganneff/if1sec)
 //!
 //! # Usage
 //! To implement a standard munin plugin, which munin runs every 5 minutes when fetching data, you load this library, create an empty struct named for your plugin and then implement `MuninPlugin` for your struct. You need to write out the functions `config` and `fetch`, the rest can have the magic `unimplemented!()`, and you call start() on your Plugin.
@@ -167,6 +168,57 @@ pub trait MuninPlugin {
     /// [MuninPlugin::fetch] will be called from munin-node (usually)
     /// every 5 minutes and is expected to output data to stdout, in a
     /// munin compatible way.
+    ///
+    /// # Example
+    /// ```rust
+    /// # pub use munin_plugin::*;
+    /// # use anyhow::{anyhow, Result};
+    /// # use std::{
+    /// # env,
+    /// # fs::{rename, OpenOptions},
+    /// # io::{self, BufWriter, Write},
+    /// # path::{Path, PathBuf},
+    /// # time::{SystemTime, UNIX_EPOCH},
+    /// # };
+    /// # struct InterfacePlugin {
+    /// #   interface: String,
+    /// #   cache: PathBuf,
+    /// #   if_txbytes: PathBuf,
+    /// #   if_rxbytes: PathBuf,
+    /// # };
+    /// # impl MuninPlugin for InterfacePlugin {
+    /// # fn fetch<W: Write>(&self, handle: &mut BufWriter<W>) -> Result<()> { todo!() }
+    /// # fn config<W: Write>(&self, handle: &mut BufWriter<W>) -> Result<()> { todo!() }
+    /// fn acquire(&mut self, config: &Config) -> Result<()> {
+    ///     let cache = Path::new(&config.plugin_statedir).join("munin.if1sec.value");
+    ///     let epoch = SystemTime::now()
+    ///         .duration_since(UNIX_EPOCH)
+    ///         .expect("Time gone broken, what?")
+    ///         .as_secs(); // without the nanosecond part
+
+    ///     // Read in the received and transferred bytes, store as u64
+    ///     let rx: u64 = std::fs::read_to_string(&self.if_rxbytes)?.trim().parse()?;
+    ///     let tx: u64 = std::fs::read_to_string(&self.if_txbytes)?.trim().parse()?;
+
+    ///     // Open the munin cachefile to store our values,
+    ///     // using a BufWriter to "collect" the two writeln
+    ///     // together
+    ///     let mut cachefd = BufWriter::new(
+    ///         OpenOptions::new()
+    ///             .create(true) // If not there, create
+    ///             .write(true) // We want to write
+    ///             .append(true) // We want to append
+    ///             .open(&cache)?,
+    ///     );
+
+    ///     // And now write out values
+    ///     writeln!(cachefd, "{0}_tx.value {1}:{2}", self.interface, epoch, tx)?;
+    ///     writeln!(cachefd, "{0}_rx.value {1}:{2}", self.interface, epoch, rx)?;
+
+    ///     Ok(())
+    /// }
+    /// # }
+    /// ```
     fn acquire(&mut self, config: &Config) -> Result<()>;
 
     /// Daemonize
@@ -226,6 +278,46 @@ pub trait MuninPlugin {
     /// fn fetch<W: Write>(&self, handle: &mut BufWriter<W>) -> Result<()> {
     ///     let load = (LoadAverage::new().unwrap().five * 100.0) as isize;
     ///     writeln!(handle, "load.value {}", load)?;
+    ///     Ok(())
+    /// }
+    /// # }
+    /// ```
+    ///
+    /// # Example 2 - Write out data gathered from [MuninPlugin::acquire]
+    /// ```rust
+    /// # pub use munin_plugin::*;
+    /// # use anyhow::{anyhow, Result};
+    /// # use std::{
+    /// #     env,
+    /// #     fs::{rename, OpenOptions},
+    /// #     io::{self, BufWriter, Write},
+    /// #     path::{Path, PathBuf},
+    /// #     time::{SystemTime, UNIX_EPOCH},
+    /// # };
+    /// # use tempfile::NamedTempFile;
+    /// # struct InterfacePlugin {
+    /// #   interface: String,
+    /// #   cache: PathBuf,
+    /// #   if_txbytes: PathBuf,
+    /// #   if_rxbytes: PathBuf,
+    /// # };
+    /// # impl MuninPlugin for InterfacePlugin {
+    /// # fn config<W: Write>(&self, handle: &mut BufWriter<W>) -> Result<()> { todo!() }
+    /// # fn acquire(&mut self, config: &Config) -> Result<()> { todo!() }
+    /// fn fetch<W: Write>(&self, handle: &mut BufWriter<W>) -> Result<()> {
+    ///     // We need a temporary file
+    ///     let fetchpath = NamedTempFile::new_in(
+    ///         self.cache
+    ///             .parent()
+    ///             .expect("Could not find useful temp path"),
+    ///     )?;
+    ///     // Rename the cache file, to ensure that acquire doesn't add data
+    ///     // between us outputting data and deleting the file
+    ///     rename(&self.cache, &fetchpath)?;
+    ///     // Want to read the tempfile now
+    ///     let mut fetchfile = std::fs::File::open(&fetchpath)?;
+    ///     // And ask io::copy to just take it all and shove it into the handle
+    ///     io::copy(&mut fetchfile, handle)?;
     ///     Ok(())
     /// }
     /// # }
