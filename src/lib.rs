@@ -5,20 +5,53 @@
 //! Copyright (C) 2022 Joerg Jaspert <joerg@debian.org>
 //!
 //! # About
-//! Simple way to write munin plugins.
+
+//! Simple way to write munin plugins. They can be _standard_ plugins
+//! that run once every 5 minutes, when munin comes along to ask for
+//! data. Or they can be so-called _streaming_ plugins - plugins that
+//! fork themself into the background, continuously gathering data,
+//! handing that data to munin when it comes around.
 //!
-//! # Repository / plugin using this code
+//! Those _streaming_ plugins are needed/useful, when graphs with
+//! resolutions down to the second, rather than the default 5 minutes,
+//! should be created.
+//!
+//! # Repositories / plugins using this code
 //! - [Simple munin plugin to graph load](https://github.com/Ganneff/munin-load)
 //! - [Munin CPU graph with 1second resolution](https://github.com/Ganneff/cpu1sec/)
 //! - [Munin Interface graph with 1second resolution](https://github.com/Ganneff/if1sec)
 //!
 //! # Usage
-//! To implement a standard munin plugin, which munin runs every 5 minutes when fetching data, you load this library, create an empty struct named for your plugin and then implement `MuninPlugin` for your struct. You need to write out the functions `config` and `fetch`, the rest can have the magic `unimplemented!()`, and you call start() on your Plugin.
+//! For a _standard_ plugin you use this library, create an empty
+//! struct named for your plugin and implement MuninPlugin for this
+//! struct. You need to provide the functions `config` and `fetch`,
+//! the rest can be stubs with the magic `unimplemented!()` macro.
+//! Within `config()` you output the munin graph configuration,
+//! `fetch()` should collect the data and output it in
+//! munin-compatible format. Finally you call the `start()` or even
+//! `simple_start` function on it, and you are done.
+//!
+//! A streaming plugin is similar, except you also need to provide a
+//! useful `acquire` function and fetch will no longer gather data -
+//! that is done by `acquire`. `acquire` will be called once every
+//! second, should collect the data and write it to a file within
+//! [Config::plugin_statedir]. `fetch()` then has to write the
+//! contents of this cachefile to the handle, when called.
 //!
 //! # Example
-//! The following implements the **load** plugin from munin, graphing the load average of the system, using the 5-minute value. As implemented, it expects to be run by munin every 5 minutes, usually munin will first run it with the config parameter, followed by no parameter to fetch data. If munin-node supports it and the capability _dirtyconfig_ is set, config will also print out data.
+//! The following implements the **load** plugin from munin, graphing
+//! the load average of the system, using the 5-minute value. As
+//! implemented, it expects to be run by munin every 5 minutes,
+//! usually munin will first run it with the config parameter,
+//! followed by no parameter to fetch data. If munin-node supports it
+//! and the capability _dirtyconfig_ is set, config will also print
+//! out data.
 //!
-//! It is a shortened version of the plugin linked above (Simple munin plugin to graph load), with things like logging dropped.
+//! It is a shortened version of the plugin linked above (Simple munin
+//! plugin to graph load), with things like logging dropped.
+//!
+//! For more example code look into the actual [MuninPlugin] trait and its function
+//! definitions.
 //!
 //! ```rust
 //! use anyhow::Result;
@@ -375,7 +408,8 @@ pub trait MuninPlugin {
     /// This is just a tiny bit of "being lazy is good" and will
     /// create the [MuninPlugin::config] with the given name, then
     /// call the real start function. Only useful for plugins that do
-    /// not use daemonization.
+    /// not use daemonization or need other config changes to run
+    /// successfully..
     fn simple_start(&mut self, name: String) -> Result<bool> {
         trace!("Simple Start, setting up config");
         let config = Config::new(name);
@@ -467,7 +501,7 @@ pub trait MuninPlugin {
                 }
                 "acquire" => {
                     trace!("Called acquire to gather data");
-                    // Only will ever process anything after this line, if
+                    // Will only ever process anything after this line, if
                     // one process has our pidfile already locked, ie. if
                     // another acquire is running. (Or if we can not
                     // daemonize for another reason).
@@ -510,7 +544,7 @@ mod tests {
             true
         }
         fn acquire(&mut self, _config: &Config) -> Result<()> {
-            unimplemented!()
+            Ok(())
         }
     }
 
