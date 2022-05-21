@@ -214,7 +214,7 @@ pub trait MuninPlugin {
     /// ```
     fn config<W: Write>(&self, handle: &mut BufWriter<W>) -> Result<()>;
 
-    /// Acquire data and store it for later fetching.
+    /// Acquire data
     ///
     /// Acquire is called whenever data should be gathered. For a
     /// _standard_ plugin this will be every 5 minutes, a _streaming_
