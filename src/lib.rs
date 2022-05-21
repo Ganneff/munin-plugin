@@ -115,7 +115,7 @@
 //!     }
 //!
 //!     // Calculate data (we want the 5-minute load average) and write it to the handle.
-//!     fn acquire<W: Write>(&self, handle: &mut BufWriter<W>, _config: &Config, _epoch: u64) -> Result<()> {
+//!     fn acquire<W: Write>(&mut self, handle: &mut BufWriter<W>, _config: &Config, _epoch: u64) -> Result<()> {
 //!         let load = (LoadAverage::new().unwrap().five * 100.0) as isize;
 //!         writeln!(handle, "load.value {}", load)?;
 //!         Ok(())
@@ -125,7 +125,7 @@
 //! // The actual program start point
 //! fn main() -> Result<()> {
 //!     // Get our Plugin
-//!     let load = LoadPlugin;
+//!     let mut load = LoadPlugin;
 //!     // And let it do the work.
 //!     load.simple_start(String::from("load"))?;
 //!     Ok(())
@@ -195,8 +195,8 @@ pub trait MuninPlugin {
     /// # };
     /// # struct LoadPlugin;
     /// # impl MuninPlugin for LoadPlugin {
-    /// # fn acquire<W: Write>(&self, handle: &mut BufWriter<W>, config: &Config, epoch: u64) -> Result<()> { todo!() }
-    /// # fn fetch<W: Write>(&self, handle: &mut BufWriter<W>, config: &Config) -> Result<()> { todo!() }
+    /// # fn acquire<W: Write>(&mut self, handle: &mut BufWriter<W>, config: &Config, epoch: u64) -> Result<()> { todo!() }
+    /// # fn fetch<W: Write>(&mut self, handle: &mut BufWriter<W>, config: &Config) -> Result<()> { todo!() }
     /// fn config<W: Write>(&self, handle: &mut BufWriter<W>) -> Result<()> {
     ///     writeln!(handle, "graph_title Load average")?;
     ///     writeln!(handle, "graph_args --base 1000 -l 0")?;
@@ -248,9 +248,9 @@ pub trait MuninPlugin {
     /// #   if_rxbytes: PathBuf,
     /// # };
     /// # impl MuninPlugin for InterfacePlugin {
-    /// # fn fetch<W: Write>(&self, handle: &mut BufWriter<W>, config: &Config) -> Result<()> { todo!() }
+    /// # fn fetch<W: Write>(&mut self, handle: &mut BufWriter<W>, config: &Config) -> Result<()> { todo!() }
     /// # fn config<W: Write>(&self, handle: &mut BufWriter<W>) -> Result<()> { todo!() }
-    /// fn acquire<W: Write>(&self, handle: &mut BufWriter<W>, config: &Config, epoch: u64) -> Result<()> {
+    /// fn acquire<W: Write>(&mut self, handle: &mut BufWriter<W>, config: &Config, epoch: u64) -> Result<()> {
     ///     let load = (LoadAverage::new().unwrap().five * 100.0) as isize;
     ///     writeln!(handle, "load.value {}", load)?;
     ///     Ok(())
@@ -276,9 +276,9 @@ pub trait MuninPlugin {
     /// #   if_rxbytes: PathBuf,
     /// # };
     /// # impl MuninPlugin for InterfacePlugin {
-    /// # fn fetch<W: Write>(&self, handle: &mut BufWriter<W>, config: &Config) -> Result<()> { todo!() }
+    /// # fn fetch<W: Write>(&mut self, handle: &mut BufWriter<W>, config: &Config) -> Result<()> { todo!() }
     /// # fn config<W: Write>(&self, handle: &mut BufWriter<W>) -> Result<()> { todo!() }
-    /// fn acquire<W: Write>(&self, handle: &mut BufWriter<W>, config: &Config, epoch: u64) -> Result<()> {
+    /// fn acquire<W: Write>(&mut self, handle: &mut BufWriter<W>, config: &Config, epoch: u64) -> Result<()> {
     ///     // Read in the received and transferred bytes, store as u64
     ///     let rx: u64 = std::fs::read_to_string(&self.if_rxbytes)?.trim().parse()?;
     ///     let tx: u64 = std::fs::read_to_string(&self.if_txbytes)?.trim().parse()?;
@@ -292,7 +292,7 @@ pub trait MuninPlugin {
     /// # }
     /// ```
     fn acquire<W: Write>(
-        &self,
+        &mut self,
         handle: &mut BufWriter<W>,
         config: &Config,
         epoch: u64,
@@ -302,7 +302,7 @@ pub trait MuninPlugin {
     ///
     /// This function will daemonize the process and then start a
     /// loop, run once a second, calling [MuninPlugin::acquire].
-    fn daemon(&self, config: &Config) -> Result<()> {
+    fn daemon(&mut self, config: &Config) -> Result<()> {
         // We want to run as daemon, so prepare
         let daemonize = Daemonize::new()
             .pid_file(&config.pidfile)
@@ -378,7 +378,7 @@ pub trait MuninPlugin {
     /// You read the whole cachefile, then output it to munin, then
     /// delete it - and during the halfsecond this took, new data
     /// appeared in the file, now lost.
-    fn fetch<W: Write>(&self, handle: &mut BufWriter<W>, config: &Config) -> Result<()> {
+    fn fetch<W: Write>(&mut self, handle: &mut BufWriter<W>, config: &Config) -> Result<()> {
         // Daemonize means plugin writes a cachefile, so lets output that
         if config.daemonize {
             // We need a temporary file
@@ -440,7 +440,7 @@ pub trait MuninPlugin {
     /// call the real start function. Only useful for plugins that do
     /// not use daemonization or need other config changes to run
     /// successfully..
-    fn simple_start(&self, name: String) -> Result<bool> {
+    fn simple_start(&mut self, name: String) -> Result<bool> {
         trace!("Simple Start, setting up config");
         let config = Config::new(name);
         trace!("Plugin: {:#?}", config);
@@ -452,7 +452,7 @@ pub trait MuninPlugin {
     /// The main plugin function, this will deal with parsing
     /// commandline arguments and doing what is expected of the plugin
     /// (present config, fetch values, whatever).
-    fn start(&self, config: Config) -> Result<bool> {
+    fn start(&mut self, config: Config) -> Result<bool> {
         trace!("Plugin start");
         trace!("My plugin config: {config:#?}");
 
@@ -565,7 +565,7 @@ mod tests {
             writeln!(handle, "There is no config")?;
             Ok(())
         }
-        fn fetch<W: Write>(&self, handle: &mut BufWriter<W>, _config: &Config) -> Result<()> {
+        fn fetch<W: Write>(&mut self, handle: &mut BufWriter<W>, _config: &Config) -> Result<()> {
             writeln!(handle, "This is a value")?;
             writeln!(handle, "And one more value")?;
             Ok(())
@@ -574,7 +574,7 @@ mod tests {
             true
         }
         fn acquire<W: Write>(
-            &self,
+            &mut self,
             _handle: &mut BufWriter<W>,
             _config: &Config,
             _epoch: u64,
@@ -606,7 +606,7 @@ mod tests {
 
     #[test]
     fn test_fetch() {
-        let test = TestPlugin;
+        let mut test = TestPlugin;
 
         // We want to check the output of config contains our test string
         // above, so have it "write" it to a variable, then check if
