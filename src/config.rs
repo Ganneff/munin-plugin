@@ -4,7 +4,11 @@
 #![forbid(unsafe_code)]
 
 use log::trace;
-use std::{env, path::PathBuf};
+use rand::Rng;
+use std::{
+    env,
+    path::{Path, PathBuf},
+};
 
 /// Plugin configuration.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -19,6 +23,17 @@ pub struct Config {
     /// Fallback to /tmp if environment variable MUNIN_PLUGSTATE is
     /// not set.
     pub plugin_statedir: PathBuf,
+
+    /// Cachefile for the plugin
+    ///
+    /// Plugins that daemonize and continuously fetch data need to
+    /// write them somewhere, so that the
+    /// [MuninPlugin::fetch](super::MuninPlugin::fetch) function can
+    /// output them. The default is a combination of
+    /// [Config::plugin_statedir] and a random string, with _munin_ and
+    /// _value_ added, in [std::format!] syntax: `"{}.munin.{}.value",
+    /// [Config::plugin_statedir], randomstring`.
+    pub plugin_cache: PathBuf,
 
     /// Does munin support dirtyconfig? (Send data after sending config)
     ///
@@ -54,7 +69,8 @@ pub struct Config {
 
 impl Config {
     /// Create a new Config with defined plugin_name, also setting
-    /// [Config::pidfile] to a sensible value using the [Config::plugin_name].
+    /// [Config::pidfile] and [Config::plugin_cache] to a sensible
+    /// value using the [Config::plugin_name].
     ///
     /// # Examples
     ///
@@ -70,7 +86,8 @@ impl Config {
             plugin_name,
             ..Default::default()
         };
-        cfg.pidfile = cfg.plugin_statedir.join(pd + ".pid");
+        cfg.pidfile = cfg.plugin_statedir.join(format!("{}.pid", pd));
+        cfg.plugin_cache = cfg.plugin_statedir.join(format!("munin.{}.value", pd));
         cfg
     }
 }
@@ -84,9 +101,13 @@ impl Default for Config {
     fn default() -> Self {
         let statedir =
             PathBuf::from(env::var("MUNIN_PLUGSTATE").unwrap_or_else(|_| String::from("/tmp")));
+        let mut rng = rand::thread_rng();
+        let insert: u16 = rng.gen();
+        let cachename = Path::new(&statedir).join(format!("munin.{}.value", insert));
         Self {
             plugin_name: String::from("Simple munin plugin in Rust"),
             plugin_statedir: statedir.clone(),
+            plugin_cache: cachename,
             dirtyconfig: match env::var("MUNIN_CAP_DIRTYCONFIG") {
                 Ok(val) => val.eq(&"1"),
                 Err(_) => false,
@@ -131,6 +152,9 @@ mod tests {
         config2.pidfile.push(String::from("Lala.pid"));
 
         let config3 = Config::new(String::from("Lala"));
+        // At this point, the plugin_cache should be different
+        assert_ne!(config2, config3);
+        config2.plugin_cache = config2.plugin_statedir.join("munin.Lala.value");
         assert_eq!(config2, config3);
     }
 }

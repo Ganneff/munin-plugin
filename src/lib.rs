@@ -6,15 +6,22 @@
 //!
 //! # About
 
-//! Simple way to write munin plugins. They can be _standard_ plugins
-//! that run once every 5 minutes, when munin comes along to ask for
-//! data. Or they can be so-called _streaming_ plugins - plugins that
-//! fork themself into the background, continuously gathering data,
-//! handing that data to munin when it comes around.
+//! Simple way to write munin plugins. There are basically two types of plugins,
+//! - **Simple** or **standard** ones, those are called once every munin
+//! run and gather and output there data at that time. Usually every 5
+//! minutes.
+//! - **Streaming** ones, those daemonize themself and _continuously_
+//! gather data, usually caching it in a file, and when munin comes
+//! around after 5 minutes again, they output everything they gathered
+//! in the meantime.
 //!
 //! Those _streaming_ plugins are needed/useful, when graphs with
 //! resolutions down to the second, rather than the default 5 minutes,
 //! should be created.
+//!
+//! Both types of plugins have to follow all the usual rules for munin
+//! plugins, such as outputting their data to stdout and reacting to
+//! the `config` parameter to print their munin graph configuration.
 //!
 //! # Repositories / plugins using this code
 //! - [Simple munin plugin to graph load](https://github.com/Ganneff/munin-load)
@@ -22,21 +29,48 @@
 //! - [Munin Interface graph with 1second resolution](https://github.com/Ganneff/if1sec)
 //!
 //! # Usage
-//! For a _standard_ plugin you use this library, create an empty
-//! struct named for your plugin and implement MuninPlugin for this
-//! struct. You need to provide the functions `config` and `fetch`,
-//! the rest can be stubs with the magic `unimplemented!()` macro.
-//! Within `config()` you output the munin graph configuration,
-//! `fetch()` should collect the data and output it in
-//! munin-compatible format. Finally you call the `start()` or even
-//! `simple_start` function on it, and you are done.
+
+//! This library tries to abstract as much of the details away, so you
+//! can concentrate on the actual task - defining how the graph should
+//! appear and gathering the data. For that, you need to implement the
+//! [MuninPlugin] trait and provide the two functions `config` and
+//! `acquire`, all the rest are provided with a (hopefully) useful
+//! default implementation.
 //!
-//! A streaming plugin is similar, except you also need to provide a
-//! useful `acquire` function and fetch will no longer gather data -
-//! that is done by `acquire`. `acquire` will be called once every
-//! second, should collect the data and write it to a file within
-//! [Config::plugin_statedir]. `fetch()` then has to write the
-//! contents of this cachefile to the handle, when called.
+//! ## config()
+//! The _config_ function will be called whenever the plugin gets
+//! called with the config argument from munin. This happens on every
+//! munin run, which usually happens every 5 minutes. It is expected
+//! to print out a munin graph configuration and you can find details
+//! on possible values to print at [the Munin Plugin
+//! Guide](http://guide.munin-monitoring.org/en/latest/plugin/writing.html).
+//! For some basics you can also look into the examples throughout
+//! this lib.
+//!
+//! **Note**: Streaming plugins should take care of correctly setting
+//! munins `graph_data_size` and `update_rate` option. Those is the
+//! difference in their configuration compared to standard plugins!
+//!
+//! ## acquire()
+//!
+//! The _acquire_ function will be called whenever the plugin needs to
+//! gather data. For a _standard_ plugin that will be once every 5
+//! minutes. A _streaming_ plugin will call this function once every
+//! second.
+//!
+//! In both cases, _standard_ and _streaming_, you should do whatever
+//! is needed to gather the data and then write it to the provided
+//! handle, this library will take care of either handing it directly
+//! to munin on stdout (_standard_) or storing it in a cache file
+//! (_streaming_), to hand it out whenever munin comes around to fetch
+//! the data.
+//!
+//! The format to write the data in is the one munin expects,
+//! - _standard_: fieldname.value VALUE
+//! - _streaming_: fieldname.value EPOCH:VALUE
+//! where fieldname matches the config output, EPOCH is the
+//! unix epoch in seconds and VALUE is whatever value got
+//! calculated.
 //!
 //! # Example
 //! The following implements the **load** plugin from munin, graphing
@@ -45,17 +79,17 @@
 //! usually munin will first run it with the config parameter,
 //! followed by no parameter to fetch data. If munin-node supports it
 //! and the capability _dirtyconfig_ is set, config will also print
-//! out data.
+//! out data (this library handles that for you).
 //!
 //! It is a shortened version of the plugin linked above (Simple munin
 //! plugin to graph load), with things like logging dropped.
 //!
-//! For more example code look into the actual [MuninPlugin] trait and its function
-//! definitions.
+//! For more example code look into the actual [MuninPlugin] trait and
+//! its function definitions.
 //!
 //! ```rust
 //! use anyhow::Result;
-//! use munin_plugin::{config::Config, MuninPlugin};
+//! use munin_plugin::{Config, MuninPlugin};
 //! use procfs::LoadAverage;
 //! use std::io::{self, BufWriter, Write};
 //!
@@ -80,31 +114,18 @@
 //!        Ok(())
 //!     }
 //!
-//!     // Fetch and display data
-//!     fn fetch<W: Write>(&self, handle: &mut BufWriter<W>) -> Result<()> {
+//!     // Calculate data (we want the 5-minute load average) and write it to the handle.
+//!     fn acquire<W: Write>(&self, handle: &mut BufWriter<W>, _config: &Config, _epoch: u64) -> Result<()> {
 //!         let load = (LoadAverage::new().unwrap().five * 100.0) as isize;
-//!         writeln!(handle, "load.value {}", load);
+//!         writeln!(handle, "load.value {}", load)?;
 //!         Ok(())
-//!     }
-//!
-//!     // This plugin does not need any setup and will just work, so
-//!     // just auto-configure it, if asked for.
-//!     fn check_autoconf(&self) -> bool {
-//!         true
-//!     }
-//!
-//!     // The acquire function is not needed for a simple plugin that
-//!     // only gathers data every 5 minutes (munin standard), but the
-//!     // trait requires a stub to be there.
-//!     fn acquire(&mut self, config: &Config) -> Result<()> {
-//!         unimplemented!()
 //!     }
 //! }
 //!
 //! // The actual program start point
 //! fn main() -> Result<()> {
 //!     // Get our Plugin
-//!     let mut load = LoadPlugin;
+//!     let load = LoadPlugin;
 //!     // And let it do the work.
 //!     load.simple_start(String::from("load"))?;
 //!     Ok(())
@@ -113,10 +134,9 @@
 //!
 //! # Logging
 //! This crate uses the default [log] crate to output log messages of
-//! level trace or debug. No other levels will be used. If you want to
-//! see them, select a log framework you like and ensure its level
-//! will display trace/debug messages. See that frameworks
-//! documentation on how to setup/include it.
+//! level trace. If you want to see them, select a log framework you
+//! like and ensure its level will display trace messages. See
+//! that frameworks documentation on how to setup/include it.
 //!
 //! If you do not want/need log output, just do nothing.
 
@@ -143,11 +163,13 @@ use std::{
 };
 // daemonize
 use std::{
-    fs::File,
+    fs::{rename, File, OpenOptions},
     process::{Command, Stdio},
     thread,
-    time::Duration,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
+// daemonize
+use tempfile::NamedTempFile;
 
 /// Defines a Munin Plugin and the needed functions
 pub trait MuninPlugin {
@@ -161,10 +183,7 @@ pub trait MuninPlugin {
     /// capacity defaults to 8192 bytes, but if you need more, its
     /// size can be set using [Config::cfgsize]. An example where this
     /// may be useful is a munin multigraph plugin that outputs config
-    /// for a many graphs.
-    ///
-    /// # When
-    /// This function is needed for every plugin.
+    /// for many graphs.
     ///
     /// # Example
     /// ```rust
@@ -176,8 +195,8 @@ pub trait MuninPlugin {
     /// # };
     /// # struct LoadPlugin;
     /// # impl MuninPlugin for LoadPlugin {
-    /// # fn acquire(&mut self, config: &Config) -> Result<()> { todo!() }
-    /// # fn fetch<W: Write>(&self, handle: &mut BufWriter<W>) -> Result<()> { todo!() }
+    /// # fn acquire<W: Write>(&self, handle: &mut BufWriter<W>, config: &Config, epoch: u64) -> Result<()> { todo!() }
+    /// # fn fetch<W: Write>(&self, handle: &mut BufWriter<W>, config: &Config) -> Result<()> { todo!() }
     /// fn config<W: Write>(&self, handle: &mut BufWriter<W>) -> Result<()> {
     ///     writeln!(handle, "graph_title Load average")?;
     ///     writeln!(handle, "graph_args --base 1000 -l 0")?;
@@ -197,22 +216,49 @@ pub trait MuninPlugin {
 
     /// Acquire data and store it for later fetching.
     ///
-    /// Acquire is called from [MuninPlugin::daemon] once every second
-    /// and is expected to do whatever is neccessary to gather the
-    /// data, the plugin is supposed to gather. It should then store
-    /// it somewhere, where [MuninPlugin::fetch] can read it.
-    /// [MuninPlugin::fetch] will be called from munin-node (usually)
-    /// every 5 minutes and is expected to output data to stdout, in a
-    /// munin compatible way.
+    /// Acquire is called whenever data should be gathered. For a
+    /// _standard_ plugin this will be every 5 minutes, a _streaming_
+    /// plugin will call acquire once a second. Acquire is expected to
+    /// do whatever is neccessary to gather the data that the plugin
+    /// is supposed to gather. It should writeln!() it to the provided
+    /// handle, which - depending on the plugin type - will either be
+    /// connected to stdout or a cachefile. The data written out has
+    /// to be in munin compatible format:
+    /// - _standard_ plugin: fieldname.value VALUE
+    /// - _streaming_ plugin: fieldname.value EPOCH:VALUE
+    /// where fieldname matches the config output, EPOCH is the unix
+    /// epoch in seconds and VALUE is whatever value got calculated.
     ///
-    /// # When
-    /// This function is only needed if [Config::daemonize] is true.
-    /// Simple plugins that are run every 5 minutes only by munin, and
-    /// do not gather data in the meantime, do not need to implement
-    /// it. For such plugins provide a stub (as seen on this docs main
-    /// page) that says ```unimplemented!()```.
+    /// # Example 1, _standard_ plugin
+    /// ```rust
+    /// # pub use munin_plugin::*;
+    /// # use procfs::LoadAverage;
+    /// # use anyhow::{anyhow, Result};
+    /// # use std::{
+    /// # env,
+    /// # fs::{rename, OpenOptions},
+    /// # io::{self, BufWriter, Write},
+    /// # path::{Path, PathBuf},
+    /// # time::{SystemTime, UNIX_EPOCH},
+    /// # };
+    /// # struct InterfacePlugin {
+    /// #   interface: String,
+    /// #   cache: PathBuf,
+    /// #   if_txbytes: PathBuf,
+    /// #   if_rxbytes: PathBuf,
+    /// # };
+    /// # impl MuninPlugin for InterfacePlugin {
+    /// # fn fetch<W: Write>(&self, handle: &mut BufWriter<W>, config: &Config) -> Result<()> { todo!() }
+    /// # fn config<W: Write>(&self, handle: &mut BufWriter<W>) -> Result<()> { todo!() }
+    /// fn acquire<W: Write>(&self, handle: &mut BufWriter<W>, config: &Config, epoch: u64) -> Result<()> {
+    ///     let load = (LoadAverage::new().unwrap().five * 100.0) as isize;
+    ///     writeln!(handle, "load.value {}", load)?;
+    ///     Ok(())
+    /// }
+    /// # }
+    /// ```
     ///
-    /// # Example
+    /// # Example 2, _streaming_ plugin
     /// ```rust
     /// # pub use munin_plugin::*;
     /// # use anyhow::{anyhow, Result};
@@ -230,45 +276,33 @@ pub trait MuninPlugin {
     /// #   if_rxbytes: PathBuf,
     /// # };
     /// # impl MuninPlugin for InterfacePlugin {
-    /// # fn fetch<W: Write>(&self, handle: &mut BufWriter<W>) -> Result<()> { todo!() }
+    /// # fn fetch<W: Write>(&self, handle: &mut BufWriter<W>, config: &Config) -> Result<()> { todo!() }
     /// # fn config<W: Write>(&self, handle: &mut BufWriter<W>) -> Result<()> { todo!() }
-    /// fn acquire(&mut self, config: &Config) -> Result<()> {
-    ///     let cache = Path::new(&config.plugin_statedir).join("munin.if1sec.value");
-    ///     let epoch = SystemTime::now()
-    ///         .duration_since(UNIX_EPOCH)
-    ///         .expect("Time gone broken, what?")
-    ///         .as_secs(); // without the nanosecond part
-
+    /// fn acquire<W: Write>(&self, handle: &mut BufWriter<W>, config: &Config, epoch: u64) -> Result<()> {
     ///     // Read in the received and transferred bytes, store as u64
     ///     let rx: u64 = std::fs::read_to_string(&self.if_rxbytes)?.trim().parse()?;
     ///     let tx: u64 = std::fs::read_to_string(&self.if_txbytes)?.trim().parse()?;
-
-    ///     // Open the munin cachefile to store our values,
-    ///     // using a BufWriter to "collect" the two writeln
-    ///     // together
-    ///     let mut cachefd = BufWriter::new(
-    ///         OpenOptions::new()
-    ///             .create(true) // If not there, create
-    ///             .write(true) // We want to write
-    ///             .append(true) // We want to append
-    ///             .open(&cache)?,
-    ///     );
-
+    ///
     ///     // And now write out values
-    ///     writeln!(cachefd, "{0}_tx.value {1}:{2}", self.interface, epoch, tx)?;
-    ///     writeln!(cachefd, "{0}_rx.value {1}:{2}", self.interface, epoch, rx)?;
-
+    ///     writeln!(handle, "{0}_tx.value {1}:{2}", self.interface, epoch, tx)?;
+    ///     writeln!(handle, "{0}_rx.value {1}:{2}", self.interface, epoch, rx)?;
+    ///
     ///     Ok(())
     /// }
     /// # }
     /// ```
-    fn acquire(&mut self, config: &Config) -> Result<()>;
+    fn acquire<W: Write>(
+        &self,
+        handle: &mut BufWriter<W>,
+        config: &Config,
+        epoch: u64,
+    ) -> Result<()>;
 
     /// Daemonize
     ///
     /// This function will daemonize the process and then start a
     /// loop, run once a second, calling [MuninPlugin::acquire].
-    fn daemon(&mut self, config: &Config) -> Result<()> {
+    fn daemon(&self, config: &Config) -> Result<()> {
         // We want to run as daemon, so prepare
         let daemonize = Daemonize::new()
             .pid_file(&config.pidfile)
@@ -286,8 +320,30 @@ pub trait MuninPlugin {
             // Let loop helper prepare
             loop_helper.loop_start();
 
-            self.acquire(config)?;
+            // Streaming plugins need the epoch, so provide it
+            let epoch = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("Time gone broken, what?")
+                .as_secs(); // without the nanosecond part
 
+            // Own scope, so file is closed before we sleep. Ensures
+            // we won't have a file open, that fetch just moved away
+            // to send out to munin.
+            {
+                // Open the munin cachefile to store our values,
+                // using a BufWriter to "collect" the two writeln
+                // together
+                let mut handle = BufWriter::with_capacity(
+                    config.fetchsize,
+                    OpenOptions::new()
+                        .create(true) // If not there, create
+                        .write(true) // We want to write
+                        .append(true) // We want to append
+                        .open(&config.plugin_cache)?,
+                );
+
+                self.acquire(&mut handle, config, epoch)?;
+            }
             // Sleep for the rest of the second
             loop_helper.loop_sleep();
         }
@@ -299,79 +355,53 @@ pub trait MuninPlugin {
     /// environment set by munin), this will also be called right
     /// after having called [MuninPlugin::config].
     ///
-    /// A simple plugin may just gather data here too and then write it to the handle.
-    /// A plugin that daemonizes will gather data in [MuninPlugin::acquire] and cache
-    /// that in one or more cachefiles and just push it all to the handle (possibly using [std::io::copy]).
+    /// The size of the BufWriter this function uses is configurable
+    /// from [Config::fetchsize].
     ///
-    /// The size of the BufWriter is configurable from [Config::fetchsize].
+    /// This function will adjust its behaviour based on the plugin
+    /// being a _standard_ or _streaming_ plugin. For _standard_ plugins
+    /// it will simply call acquire, so data is gathered and written
+    /// to the provided handle (and as such, to stdout where munin
+    /// expects it).
     ///
-    /// # When
-    /// This function is needed for every plugin, simple plugins may
-    /// directly get the data in here and then write it to the handle,
-    /// while those that daemonize will typically write out the
-    /// contents of their cache file.
+    /// For _streaming_ plugins it will create a temporary file beside
+    /// the [config::Config::plugin_cache], will rename the
+    /// [config::Config::plugin_cache] and then use [std::io::copy] to
+    /// "copy" the data to the provided handle.
     ///
-    /// # Example 1 - Simple: Calculate some data, output
-    /// ```rust
-    /// # use munin_plugin::*;
-    /// # use anyhow::{anyhow, Result};
-    /// # use std::{
-    /// # env,
-    /// # io::{self, BufWriter, Write},
-    /// # };
-    /// use procfs::LoadAverage;
-    /// # struct LoadPlugin;
-    /// # impl MuninPlugin for LoadPlugin {
-    /// # fn acquire(&mut self, config: &Config) -> Result<()> { todo!() }
-    /// # fn config<W: Write>(&self, handle: &mut BufWriter<W>) -> Result<()> { todo!() }
-    /// fn fetch<W: Write>(&self, handle: &mut BufWriter<W>) -> Result<()> {
-    ///     let load = (LoadAverage::new().unwrap().five * 100.0) as isize;
-    ///     writeln!(handle, "load.value {}", load)?;
-    ///     Ok(())
-    /// }
-    /// # }
-    /// ```
-    ///
-    /// # Example 2 - Write out data gathered from [MuninPlugin::acquire]
-    /// ```rust
-    /// # pub use munin_plugin::*;
-    /// # use anyhow::{anyhow, Result};
-    /// # use std::{
-    /// #     env,
-    /// #     fs::{rename, OpenOptions},
-    /// #     io::{self, BufWriter, Write},
-    /// #     path::{Path, PathBuf},
-    /// #     time::{SystemTime, UNIX_EPOCH},
-    /// # };
-    /// # use tempfile::NamedTempFile;
-    /// # struct InterfacePlugin {
-    /// #   interface: String,
-    /// #   cache: PathBuf,
-    /// #   if_txbytes: PathBuf,
-    /// #   if_rxbytes: PathBuf,
-    /// # };
-    /// # impl MuninPlugin for InterfacePlugin {
-    /// # fn config<W: Write>(&self, handle: &mut BufWriter<W>) -> Result<()> { todo!() }
-    /// # fn acquire(&mut self, config: &Config) -> Result<()> { todo!() }
-    /// fn fetch<W: Write>(&self, handle: &mut BufWriter<W>) -> Result<()> {
-    ///     // We need a temporary file
-    ///     let fetchpath = NamedTempFile::new_in(
-    ///         self.cache
-    ///             .parent()
-    ///             .expect("Could not find useful temp path"),
-    ///     )?;
-    ///     // Rename the cache file, to ensure that acquire doesn't add data
-    ///     // between us outputting data and deleting the file
-    ///     rename(&self.cache, &fetchpath)?;
-    ///     // Want to read the tempfile now
-    ///     let mut fetchfile = std::fs::File::open(&fetchpath)?;
-    ///     // And ask io::copy to just take it all and shove it into the handle
-    ///     io::copy(&mut fetchfile, handle)?;
-    ///     Ok(())
-    /// }
-    /// # }
-    /// ```
-    fn fetch<W: Write>(&self, handle: &mut BufWriter<W>) -> Result<()>;
+    /// # Overriding this function
+    /// If you want to override this function, you should ensure that
+    /// (for _streaming_ plugins) you ensure that the cache file is
+    /// reset, whenever `fetch()` runs, or old data may be given to
+    /// munin needlessly. You also need to ensure to not accidently
+    /// deleting data when dealing with your cachefile. For example:
+    /// You read the whole cachefile, then output it to munin, then
+    /// delete it - and during the halfsecond this took, new data
+    /// appeared in the file, now lost.
+    fn fetch<W: Write>(&self, handle: &mut BufWriter<W>, config: &Config) -> Result<()> {
+        // Daemonize means plugin writes a cachefile, so lets output that
+        if config.daemonize {
+            // We need a temporary file
+            let fetchpath = NamedTempFile::new_in(
+                config
+                    .plugin_cache
+                    .parent()
+                    .expect("Could not find useful temp path"),
+            )?;
+            // Rename the cache file, to ensure that acquire doesn't add data
+            // between us outputting data and deleting the file
+            rename(&config.plugin_cache, &fetchpath)?;
+            // Want to read the tempfile now
+            let mut fetchfile = std::fs::File::open(&fetchpath)?;
+            // And ask io::copy to just take it all and shove it into the handle
+            io::copy(&mut fetchfile, handle)?;
+        } else {
+            // Not daemonizing, plugin gathers data and wants to output it directly.
+            // So we just call acquire, which is expected to write its data to handle.
+            self.acquire(handle, config, 0)?;
+        }
+        Ok(())
+    }
 
     /// Check whatever is neccessary to decide if the plugin can
     /// auto-configure itself.
@@ -410,7 +440,7 @@ pub trait MuninPlugin {
     /// call the real start function. Only useful for plugins that do
     /// not use daemonization or need other config changes to run
     /// successfully..
-    fn simple_start(&mut self, name: String) -> Result<bool> {
+    fn simple_start(&self, name: String) -> Result<bool> {
         trace!("Simple Start, setting up config");
         let config = Config::new(name);
         trace!("Plugin: {:#?}", config);
@@ -422,7 +452,7 @@ pub trait MuninPlugin {
     /// The main plugin function, this will deal with parsing
     /// commandline arguments and doing what is expected of the plugin
     /// (present config, fetch values, whatever).
-    fn start(&mut self, config: Config) -> Result<bool> {
+    fn start(&self, config: Config) -> Result<bool> {
         trace!("Plugin start");
         trace!("My plugin config: {config:#?}");
 
@@ -466,7 +496,7 @@ pub trait MuninPlugin {
                 let stdout = io::stdout();
                 // Buffered writer, to gather multiple small writes together
                 let mut handle = BufWriter::with_capacity(config.fetchsize, stdout.lock());
-                self.fetch(&mut handle)?;
+                self.fetch(&mut handle, &config)?;
                 trace!("Done");
                 // And flush the handle, so it can also deal with possible errors
                 handle.flush()?;
@@ -489,7 +519,7 @@ pub trait MuninPlugin {
                     if config.dirtyconfig {
                         trace!("Munin supports dirtyconfig, sending data now");
                         let mut handle = BufWriter::with_capacity(config.fetchsize, stdout.lock());
-                        self.fetch(&mut handle)?;
+                        self.fetch(&mut handle, &config)?;
                         // And flush the handle, so it can also deal with possible errors
                         handle.flush()?;
                     }
@@ -535,7 +565,7 @@ mod tests {
             writeln!(handle, "There is no config")?;
             Ok(())
         }
-        fn fetch<W: Write>(&self, handle: &mut BufWriter<W>) -> Result<()> {
+        fn fetch<W: Write>(&self, handle: &mut BufWriter<W>, _config: &Config) -> Result<()> {
             writeln!(handle, "This is a value")?;
             writeln!(handle, "And one more value")?;
             Ok(())
@@ -543,7 +573,12 @@ mod tests {
         fn check_autoconf(&self) -> bool {
             true
         }
-        fn acquire(&mut self, _config: &Config) -> Result<()> {
+        fn acquire<W: Write>(
+            &self,
+            _handle: &mut BufWriter<W>,
+            _config: &Config,
+            _epoch: u64,
+        ) -> Result<()> {
             Ok(())
         }
     }
@@ -578,7 +613,8 @@ mod tests {
         // the variable contains what we want
         let checktext = Vec::new();
         let mut handle = BufWriter::new(checktext);
-        test.fetch(&mut handle).unwrap();
+        test.fetch(&mut handle, &config::Config::new("test".to_string()))
+            .unwrap();
         handle.flush().unwrap();
 
         // And now check what got "written" into the variable
