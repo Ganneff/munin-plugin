@@ -33,24 +33,30 @@ Metric output format: x/y
     x = unsafe code used by the build
     y = total unsafe code found in the crate
 
-Symbols:
+Symbols: 
     🔒  = No `unsafe` usage found, declares #![forbid(unsafe_code)]
     ❓  = No `unsafe` usage found, missing #![forbid(unsafe_code)]
     ☢️  = `unsafe` usage found
 
 Functions  Expressions  Impls  Traits  Methods  Dependency
 
-0/0        0/0          0/0    0/0     0/0      🔒  munin-plugin 0.1.5
+0/0        0/0          0/0    0/0     0/0      🔒  munin-plugin 0.1.9
 15/18      442/449      3/3    0/0     11/11    ☢️  ├── anyhow 1.0.57
 13/13      189/193      0/0    0/0     0/0      ☢️  ├── daemonize 0.4.1
 0/0        0/0          0/0    0/0     0/0      ❓  │   ├── boxfnonce 0.1.1
-0/21       12/368       0/2    0/0     2/40     ☢️  │   └── libc 0.2.125
+0/21       12/368       0/2    0/0     2/40     ☢️  │   └── libc 0.2.126
+0/0        0/0          0/0    0/0     0/0      🔒  ├── fastrand 1.7.0
 0/0        52/157       0/0    0/0     0/0      ☢️  ├── fs2 0.4.3
-0/21       12/368       0/2    0/0     2/40     ☢️  │   └── libc 0.2.125
+0/21       12/368       0/2    0/0     2/40     ☢️  │   └── libc 0.2.126
 1/1        16/18        1/1    0/0     0/0      ☢️  ├── log 0.4.17
 0/0        0/0          0/0    0/0     0/0      ❓  │   └── cfg-if 1.0.0
-0/0        15/15        0/0    0/0     0/0      ☢️  └── spin_sleep 1.1.1
+0/0        15/15        0/0    0/0     0/0      ☢️  ├── spin_sleep 1.1.1
+0/0        25/71        0/0    0/0     0/0      ☢️  └── tempfile 3.3.0
+0/0        0/0          0/0    0/0     0/0      ❓      ├── cfg-if 1.0.0
+0/0        0/0          0/0    0/0     0/0      🔒      ├── fastrand 1.7.0
+0/21       12/368       0/2    0/0     2/40     ☢️      ├── libc 0.2.126
+0/0        0/79         0/0    0/0     0/0      ❓      └── remove_dir_all 0.5.3
 
-29/53      726/1200     4/6    0/0     13/51
+29/53      751/1350     4/6    0/0     13/51  
 
 ```

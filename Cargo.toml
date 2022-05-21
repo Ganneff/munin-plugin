@@ -12,9 +12,9 @@ description = "Ease writing of plugins for munin in Rust"
 [dependencies]
 anyhow = "1.0.57"
 daemonize = "0.4.1"
+fastrand = "1.7.0"
 fs2 = "0.4.3"
 log = "0.4.17"
-rand = "0.8.5"
 spin_sleep = "1.1.1"
 tempfile = "3.3.0"
 

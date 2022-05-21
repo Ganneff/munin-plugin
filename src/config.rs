@@ -3,10 +3,11 @@
 // We do not want to write unsafe code
 #![forbid(unsafe_code)]
 
+use fastrand;
 use log::trace;
-use rand::Rng;
 use std::{
     env,
+    iter::repeat_with,
     path::{Path, PathBuf},
 };
 
@@ -101,8 +102,7 @@ impl Default for Config {
     fn default() -> Self {
         let statedir =
             PathBuf::from(env::var("MUNIN_PLUGSTATE").unwrap_or_else(|_| String::from("/tmp")));
-        let mut rng = rand::thread_rng();
-        let insert: u16 = rng.gen();
+        let insert: String = repeat_with(fastrand::alphanumeric).take(10).collect();
         let cachename = Path::new(&statedir).join(format!("munin.{}.value", insert));
         Self {
             plugin_name: String::from("Simple munin plugin in Rust"),
