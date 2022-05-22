@@ -302,6 +302,7 @@ pub trait MuninPlugin {
     ///
     /// This function will daemonize the process and then start a
     /// loop, run once a second, calling [MuninPlugin::acquire].
+    #[cfg(not(tarpaulin_include))]
     fn daemon(&mut self, config: &Config) -> Result<()> {
         // We want to run as daemon, so prepare
         let daemonize = Daemonize::new()
@@ -440,6 +441,7 @@ pub trait MuninPlugin {
     /// call the real start function. Only useful for plugins that do
     /// not use daemonization or need other config changes to run
     /// successfully..
+    #[cfg(not(tarpaulin_include))]
     fn simple_start(&mut self, name: String) -> Result<bool> {
         trace!("Simple Start, setting up config");
         let config = Config::new(name);
@@ -452,6 +454,7 @@ pub trait MuninPlugin {
     /// The main plugin function, this will deal with parsing
     /// commandline arguments and doing what is expected of the plugin
     /// (present config, fetch values, whatever).
+    #[cfg(not(tarpaulin_include))]
     fn start(&mut self, config: Config) -> Result<bool> {
         trace!("Plugin start");
         trace!("My plugin config: {config:#?}");
