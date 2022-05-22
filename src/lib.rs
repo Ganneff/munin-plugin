@@ -555,7 +555,6 @@ pub trait MuninPlugin {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Read;
 
     // Our plugin struct
     #[derive(Debug)]
@@ -569,11 +568,11 @@ mod tests {
         fn acquire<W: Write>(
             &mut self,
             handle: &mut BufWriter<W>,
-            _config: &Config,
-            _epoch: u64,
+            config: &Config,
+            epoch: u64,
         ) -> Result<()> {
-            writeln!(handle, "This is a value")?;
-            writeln!(handle, "And one more value")?;
+            writeln!(handle, "This is a value for {}", config.plugin_name)?;
+            writeln!(handle, "And one more value with epoch {}", epoch)?;
             Ok(())
         }
     }
@@ -617,7 +616,7 @@ mod tests {
         let output = String::from_utf8(recovered_writer).unwrap();
         assert_eq!(
             output,
-            String::from("This is a value\nAnd one more value\n")
+            String::from("This is a value for test\nAnd one more value with epoch 0\n")
         );
     }
 
@@ -638,9 +637,6 @@ mod tests {
         )
         .unwrap();
 
-        // And we want to access this file a second time later.
-
-        let mut read = fetchpath.reopen().unwrap();
         {
             // Setup a bufwriter as daemon() does.
             let mut handle = BufWriter::with_capacity(
@@ -654,16 +650,22 @@ mod tests {
             );
 
             // And have acquire write to it
-            test.acquire(&mut handle, &config, 0).unwrap();
+            test.acquire(&mut handle, &config, 42).unwrap();
         }
 
-        // Now read from the file
-        let mut fcontent = String::new();
-        read.read_to_string(&mut fcontent).unwrap();
+        // And we want to access the tempfile and read from it
+        (_, config.plugin_cache) = fetchpath.keep().unwrap();
+        let checktext = Vec::new();
+        let mut handle = BufWriter::new(checktext);
+
+        test.fetch(&mut handle, &config).unwrap();
+        handle.flush().unwrap();
+        let (recovered_writer, _buffered_data) = handle.into_parts();
+        let output = String::from_utf8(recovered_writer).unwrap();
 
         assert_eq!(
-            fcontent,
-            String::from("This is a value\nAnd one more value\n")
+            output,
+            String::from("This is a value for testplugin\nAnd one more value with epoch 42\n")
         );
     }
 
