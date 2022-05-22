@@ -555,6 +555,7 @@ pub trait MuninPlugin {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Read;
 
     // Our plugin struct
     #[derive(Debug)]
@@ -565,20 +566,14 @@ mod tests {
             writeln!(handle, "There is no config")?;
             Ok(())
         }
-        fn fetch<W: Write>(&mut self, handle: &mut BufWriter<W>, _config: &Config) -> Result<()> {
-            writeln!(handle, "This is a value")?;
-            writeln!(handle, "And one more value")?;
-            Ok(())
-        }
-        fn check_autoconf(&self) -> bool {
-            true
-        }
         fn acquire<W: Write>(
             &mut self,
-            _handle: &mut BufWriter<W>,
+            handle: &mut BufWriter<W>,
             _config: &Config,
             _epoch: u64,
         ) -> Result<()> {
+            writeln!(handle, "This is a value")?;
+            writeln!(handle, "And one more value")?;
             Ok(())
         }
     }
@@ -605,10 +600,10 @@ mod tests {
     }
 
     #[test]
-    fn test_fetch() {
+    fn test_fetch_standard() {
         let mut test = TestPlugin;
 
-        // We want to check the output of config contains our test string
+        // We want to check the output of fetch contains our test string
         // above, so have it "write" it to a variable, then check if
         // the variable contains what we want
         let checktext = Vec::new();
@@ -624,5 +619,58 @@ mod tests {
             output,
             String::from("This is a value\nAnd one more value\n")
         );
+    }
+
+    #[test]
+    fn test_fetch_streaming() {
+        let mut config = Config::new(String::from("testplugin"));
+        config.daemonize = true;
+        config.fetchsize = 16384;
+
+        let mut test = TestPlugin {};
+
+        // We need a temporary file
+        let fetchpath = NamedTempFile::new_in(
+            config
+                .plugin_cache
+                .parent()
+                .expect("Could not find useful temp path"),
+        )
+        .unwrap();
+
+        // And we want to access this file a second time later.
+
+        let mut read = fetchpath.reopen().unwrap();
+        {
+            // Setup a bufwriter as daemon() does.
+            let mut handle = BufWriter::with_capacity(
+                config.fetchsize,
+                OpenOptions::new()
+                    .create(true) // If not there, create
+                    .write(true) // We want to write
+                    .append(true) // We want to append
+                    .open(&fetchpath)
+                    .unwrap(),
+            );
+
+            // And have acquire write to it
+            test.acquire(&mut handle, &config, 0).unwrap();
+        }
+
+        // Now read from the file
+        let mut fcontent = String::new();
+        read.read_to_string(&mut fcontent).unwrap();
+
+        assert_eq!(
+            fcontent,
+            String::from("This is a value\nAnd one more value\n")
+        );
+    }
+
+    #[test]
+    // Kind of silly, its always false
+    fn test_check_autoconf() {
+        let test = TestPlugin;
+        assert!(!test.check_autoconf());
     }
 }
