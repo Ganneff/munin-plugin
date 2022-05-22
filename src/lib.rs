@@ -298,8 +298,11 @@ pub trait MuninPlugin {
 
     /// Daemonize
     ///
-    /// This function will daemonize the process and then start a
-    /// loop, run once a second, calling [MuninPlugin::acquire].
+    /// This function is called whenever the plugin gets run with the
+    /// acquire argument. That usually happens on fetch and acquire
+    /// gets run in the background. `daemon()` will lock its pidfile,
+    /// to show it is running, start a loop, run once a second,
+    /// calling [MuninPlugin::acquire].
     #[cfg(not(tarpaulin_include))]
     fn daemon(&mut self, config: &Config) -> Result<()> {
         // We should lock our pidfile, so the next run knows we are
@@ -325,8 +328,8 @@ pub trait MuninPlugin {
             // we won't have a file open, that fetch just moved away
             // to send out to munin.
             {
-                // Open the munin cachefile to store our values,
-                // using a BufWriter to "collect" the two writeln
+                // Open the munin cachefile to store our values, using
+                // a BufWriter to "collect" the writeln!() in acquire
                 // together
                 let mut handle = BufWriter::with_capacity(
                     config.fetchsize,
