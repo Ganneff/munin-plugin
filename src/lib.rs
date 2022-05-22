@@ -150,8 +150,6 @@ pub use crate::config::Config;
 
 use anyhow::{anyhow, Result};
 // daemonize
-use daemonize::Daemonize;
-// daemonize
 use fs2::FileExt;
 use log::{trace, warn};
 // daemonize
@@ -304,14 +302,10 @@ pub trait MuninPlugin {
     /// loop, run once a second, calling [MuninPlugin::acquire].
     #[cfg(not(tarpaulin_include))]
     fn daemon(&mut self, config: &Config) -> Result<()> {
-        // We want to run as daemon, so prepare
-        let daemonize = Daemonize::new()
-            .pid_file(&config.pidfile)
-            .chown_pid_file(true)
-            .working_directory("/tmp");
-
-        // And off into the background we go
-        daemonize.start()?;
+        // We should lock our pidfile, so the next run knows we are
+        // here, and does not spawn acquire again
+        let lockedfile = File::open(&config.pidfile).expect("Could not open pidfile");
+        lockedfile.try_lock_exclusive()?;
 
         // The loop helper makes it easy to repeat a loop once a second
         let mut loop_helper = LoopHelper::builder().build_with_target_rate(1); // Only once a second
@@ -467,11 +461,12 @@ pub trait MuninPlugin {
             // no arguments passed, print data
             1 => {
                 trace!("No argument, assuming fetch");
-                // For daemonization we need to check if a copy of us
-                // already runs. We do this by trying to lock our
-                // pidfile. If that works, nothing is running, then we
-                // need to start us in the background.
                 if config.daemonize {
+                    // For daemonization we need to check if a copy of us
+                    // with the acquire arg already runs. We do this by
+                    // trying to lock our pidfile. If that works, nothing
+                    // is running, then we need to start us in the
+                    // background.
                     let lockfile = !Path::exists(&config.pidfile) || {
                         let lockedfile =
                             File::open(&config.pidfile).expect("Could not open pidfile");
@@ -494,11 +489,13 @@ pub trait MuninPlugin {
                         thread::sleep(Duration::from_secs(1));
                     }
                 }
+                // Daemonized or not, fetch means handing out data, so lets do this.
                 trace!("Calling fetch");
                 // We want to write a possibly large amount to stdout, take and lock it
                 let stdout = io::stdout();
                 // Buffered writer, to gather multiple small writes together
                 let mut handle = BufWriter::with_capacity(config.fetchsize, stdout.lock());
+                // And give us data, please
                 self.fetch(&mut handle, &config)?;
                 trace!("Done");
                 // And flush the handle, so it can also deal with possible errors
@@ -533,14 +530,14 @@ pub trait MuninPlugin {
                     return Ok(true);
                 }
                 "acquire" => {
-                    trace!("Called acquire to gather data");
+                    trace!("Called acquire to gather data, will run loop forever");
                     // Will only ever process anything after this line, if
                     // one process has our pidfile already locked, ie. if
                     // another acquire is running. (Or if we can not
                     // daemonize for another reason).
                     if let Err(e) = self.daemon(&config) {
                         return Err(anyhow!(
-                            "Could not start plugin {} in daemon mode to gather data: {}",
+                            "Could not start plugin {} in daemon mode to gather data - already running? ({})",
                             config.plugin_name,
                             e
                         ));
