@@ -308,10 +308,11 @@ pub trait MuninPlugin {
         // We should lock our pidfile, so the next run knows we are
         // here, and does not spawn acquire again
         let lockedfile = File::open(&config.pidfile).expect("Could not open pidfile");
+        // And we keep it, until we are killed
         lockedfile.try_lock_exclusive()?;
 
-        // The loop helper makes it easy to repeat a loop once a second
-        let mut loop_helper = LoopHelper::builder().build_with_target_rate(1); // Only once a second
+        // Repeat once per second
+        let mut loop_helper = LoopHelper::builder().build_with_target_rate(1);
 
         // We run forever
         loop {
@@ -319,10 +320,7 @@ pub trait MuninPlugin {
             loop_helper.loop_start();
 
             // Streaming plugins need the epoch, so provide it
-            let epoch = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("Time gone broken, what?")
-                .as_secs(); // without the nanosecond part
+            let epoch = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs(); // without the nanosecond part
 
             // Own scope, so file is closed before we sleep. Ensures
             // we won't have a file open, that fetch just moved away
@@ -380,12 +378,7 @@ pub trait MuninPlugin {
         // Daemonize means plugin writes a cachefile, so lets output that
         if config.daemonize {
             // We need a temporary file
-            let fetchpath = NamedTempFile::new_in(
-                config
-                    .plugin_cache
-                    .parent()
-                    .expect("Could not find useful temp path"),
-            )?;
+            let fetchpath = NamedTempFile::new_in(&config.plugin_statedir)?;
             // Rename the cache file, to ensure that acquire doesn't add data
             // between us outputting data and deleting the file
             rename(&config.plugin_cache, &fetchpath)?;
