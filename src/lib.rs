@@ -161,7 +161,7 @@ use std::{
 };
 // daemonize
 use std::{
-    fs::{rename, File, OpenOptions},
+    fs::{rename, OpenOptions},
     process::{Command, Stdio},
     thread,
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -307,7 +307,10 @@ pub trait MuninPlugin {
     fn daemon(&mut self, config: &Config) -> Result<()> {
         // We should lock our pidfile, so the next run knows we are
         // here, and does not spawn acquire again
-        let lockedfile = File::open(&config.pidfile).expect("Could not open pidfile");
+        let lockedfile = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .open(&config.pidfile)?;
         // And we keep it, until we are killed
         lockedfile.try_lock_exclusive()?;
 
@@ -464,8 +467,10 @@ pub trait MuninPlugin {
                     // is running, then we need to start us in the
                     // background.
                     let lockfile = !Path::exists(&config.pidfile) || {
-                        let lockedfile =
-                            File::open(&config.pidfile).expect("Could not open pidfile");
+                        let lockedfile = OpenOptions::new()
+                            .create(true)
+                            .write(true)
+                            .open(&config.pidfile)?;
                         lockedfile.try_lock_exclusive().is_ok()
                     };
                     // If we could lock, it appears that acquire isn't running. Start it.
