@@ -179,7 +179,7 @@ pub trait MuninPlugin {
     /// plugin gives you a handle to write to, which is setup as a
     /// [std::io::BufWriter] to stdout. The [std::io::BufWriter]
     /// capacity defaults to 8192 bytes, but if you need more, its
-    /// size can be set using [Config::cfgsize]. An example where this
+    /// size can be set using [Config::config_size]. An example where this
     /// may be useful is a munin multigraph plugin that outputs config
     /// for many graphs.
     ///
@@ -333,7 +333,7 @@ pub trait MuninPlugin {
                 // a BufWriter to "collect" the writeln!() in acquire
                 // together
                 let mut handle = BufWriter::with_capacity(
-                    config.fetchsize,
+                    config.fetch_size,
                     OpenOptions::new()
                         .create(true) // If not there, create
                         .write(true) // We want to write
@@ -355,7 +355,7 @@ pub trait MuninPlugin {
     /// after having called [MuninPlugin::config].
     ///
     /// The size of the BufWriter this function uses is configurable
-    /// from [Config::fetchsize].
+    /// from [Config::fetch_size].
     ///
     /// This function will adjust its behaviour based on the plugin
     /// being a _standard_ or _streaming_ plugin. For _standard_ plugins
@@ -495,7 +495,7 @@ pub trait MuninPlugin {
                 // We want to write a possibly large amount to stdout, take and lock it
                 let stdout = io::stdout();
                 // Buffered writer, to gather multiple small writes together
-                let mut handle = BufWriter::with_capacity(config.fetchsize, stdout.lock());
+                let mut handle = BufWriter::with_capacity(config.fetch_size, stdout.lock());
                 // And give us data, please
                 self.fetch(&mut handle, &config)?;
                 trace!("Done");
@@ -511,7 +511,8 @@ pub trait MuninPlugin {
                     let stdout = io::stdout();
                     {
                         // Buffered writer, to gather multiple small writes together
-                        let mut handle = BufWriter::with_capacity(config.cfgsize, stdout.lock());
+                        let mut handle =
+                            BufWriter::with_capacity(config.config_size, stdout.lock());
                         self.config(&mut handle)?;
                         // And flush the handle, so it can also deal with possible errors
                         handle.flush()?;
@@ -519,7 +520,7 @@ pub trait MuninPlugin {
                     // If munin supports dirtyconfig, send the data now
                     if config.dirtyconfig {
                         trace!("Munin supports dirtyconfig, sending data now");
-                        let mut handle = BufWriter::with_capacity(config.fetchsize, stdout.lock());
+                        let mut handle = BufWriter::with_capacity(config.fetch_size, stdout.lock());
                         self.fetch(&mut handle, &config)?;
                         // And flush the handle, so it can also deal with possible errors
                         handle.flush()?;
@@ -625,7 +626,7 @@ mod tests {
     fn test_fetch_streaming() {
         let mut config = Config::new(String::from("testplugin"));
         config.daemonize = true;
-        config.fetchsize = 16384;
+        config.fetch_size = 16384;
 
         let mut test = TestPlugin {};
 
@@ -641,7 +642,7 @@ mod tests {
         {
             // Setup a bufwriter as daemon() does.
             let mut handle = BufWriter::with_capacity(
-                config.fetchsize,
+                config.fetch_size,
                 OpenOptions::new()
                     .create(true) // If not there, create
                     .write(true) // We want to write

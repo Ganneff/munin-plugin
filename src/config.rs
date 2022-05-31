@@ -59,13 +59,13 @@ pub struct Config {
     /// Defaults to 8192, but if the plugin outputs huge munin
     /// configuration (trivial with multigraph plugins), you may want
     /// to increase this.
-    pub cfgsize: usize,
+    pub config_size: usize,
 
     /// Size of buffer for BufWriter for [MuninPlugin::fetch](super::MuninPlugin::fetch).
     ///
     /// Defaults to 8192, but if the plugin outputs large datasets, it
     /// is useful to increase this.
-    pub fetchsize: usize,
+    pub fetch_size: usize,
 }
 
 impl Config {
@@ -114,8 +114,8 @@ impl Default for Config {
             },
             daemonize: false,
             pidfile: statedir.join("munin-plugin.pid"),
-            cfgsize: 8192,
-            fetchsize: 8192,
+            config_size: 8192,
+            fetch_size: 8192,
         }
     }
 }
@@ -145,7 +145,7 @@ mod tests {
         assert_eq!(config2.plugin_name, String::from("Lala"));
         // Defaults as expected?
         assert!(!config2.daemonize);
-        assert_eq!(config2.fetchsize, 8192);
+        assert_eq!(config2.fetch_size, 8192);
 
         config2.pidfile = PathBuf::new();
         config2.pidfile.push(&config2.plugin_statedir);
