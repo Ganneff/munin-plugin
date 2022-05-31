@@ -153,6 +153,7 @@ use anyhow::{anyhow, Result};
 use fs2::FileExt;
 use log::{trace, warn};
 // daemonize
+use daemonize::Daemonize;
 use spin_sleep::LoopHelper;
 use std::{
     env,
@@ -305,14 +306,13 @@ pub trait MuninPlugin {
     /// calling [MuninPlugin::acquire].
     #[cfg(not(tarpaulin_include))]
     fn daemon(&mut self, config: &Config) -> Result<()> {
-        // We should lock our pidfile, so the next run knows we are
-        // here, and does not spawn acquire again
-        let lockedfile = OpenOptions::new()
-            .create(true)
-            .write(true)
-            .open(&config.pidfile)?;
-        // And we keep it, until we are killed
-        lockedfile.try_lock_exclusive()?;
+        // Need to run as daemon/forked in backgreound, so prepare
+        let daemonize = Daemonize::new()
+            .pid_file(&config.pidfile)
+            .chown_pid_file(true)
+            .working_directory("/tmp");
+
+        daemonize.start()?;
 
         // Repeat once per second
         let mut loop_helper = LoopHelper::builder().build_with_target_rate(1);
@@ -481,8 +481,7 @@ pub trait MuninPlugin {
                             .stdin(Stdio::null())
                             .stdout(Stdio::null())
                             .stderr(Stdio::null())
-                            .spawn()
-                            .expect("failed to execute acquire");
+                            .spawn()?;
                         trace!("Spawned, sleep for 1s, then continue");
                         // Now we wait one second before going on, so the
                         // newly spawned process had a chance to generate us
