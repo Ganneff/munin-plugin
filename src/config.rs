@@ -69,6 +69,12 @@ pub struct Config {
 }
 
 impl Config {
+    /// Return the plugin state directory as munin wants it - or /tmp
+    /// if no environment variable is set.
+    fn get_statedir() -> PathBuf {
+        PathBuf::from(env::var("MUNIN_PLUGSTATE").unwrap_or_else(|_| String::from("/tmp")))
+    }
+
     /// Create a new Config with defined plugin_name, also setting
     /// [Config::pidfile] and [Config::plugin_cache] to a sensible
     /// value using the [Config::plugin_name].
@@ -81,15 +87,36 @@ impl Config {
     /// println!("My pidfile is {:?}", config.pidfile);
     /// ```
     pub fn new(plugin_name: String) -> Self {
-        trace!("Creating new config for plugin {plugin_name}");
+        Config::realnew(plugin_name, false)
+    }
+
+    /// Create a new Config for a streaming (daemonizing) plugin with
+    /// defined plugin_name, also setting [Config::pidfile] and
+    /// [Config::plugin_cache] to a sensible value using the
+    /// [Config::plugin_name].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use munin_plugin::config::Config;
+    /// let config = Config::new_daemon(String::from("great-plugin"));
+    /// println!("My pidfile is {:?}", config.pidfile);
+    /// ```
+    pub fn new_daemon(plugin_name: String) -> Self {
+        Config::realnew(plugin_name, true)
+    }
+
+    /// Actually do the work of creating the config element
+    fn realnew(plugin_name: String, daemonize: bool) -> Self {
+        trace!("Creating new config for plugin {plugin_name}, daemon: {daemonize}");
         let pd = plugin_name.clone();
-        let mut cfg = Self {
+        Self {
             plugin_name,
+            daemonize: daemonize,
+            pidfile: Config::get_statedir().join(format!("{}.pid", pd)),
+            plugin_cache: Config::get_statedir().join(format!("munin.{}.value", pd)),
             ..Default::default()
-        };
-        cfg.pidfile = cfg.plugin_statedir.join(format!("{}.pid", pd));
-        cfg.plugin_cache = cfg.plugin_statedir.join(format!("munin.{}.value", pd));
-        cfg
+        }
     }
 }
 
@@ -100,8 +127,7 @@ impl Default for Config {
     /// [Config::plugin_statedir] falls back to _/tmp_ if no munin
     /// environment variables are present.
     fn default() -> Self {
-        let statedir =
-            PathBuf::from(env::var("MUNIN_PLUGSTATE").unwrap_or_else(|_| String::from("/tmp")));
+        let statedir = Config::get_statedir();
         let insert: String = repeat_with(fastrand::alphanumeric).take(10).collect();
         let cachename = Path::new(&statedir).join(format!("munin.{}.value", insert));
         Self {
@@ -156,5 +182,16 @@ mod tests {
         assert_ne!(config2, config3);
         config2.plugin_cache = config2.plugin_statedir.join("munin.Lala.value");
         assert_eq!(config2, config3);
+    }
+
+    #[test]
+    fn test_new_daemon() {
+        let config = Config::new_daemon(String::from("great-plugin"));
+        assert_eq!(config.plugin_name, String::from("great-plugin"));
+        assert_eq!(
+            config.plugin_cache,
+            PathBuf::from(String::from("/tmp/munin.great-plugin.value"))
+        );
+        assert!(config.daemonize);
     }
 }
