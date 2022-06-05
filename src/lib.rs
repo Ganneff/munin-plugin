@@ -1,8 +1,7 @@
 //! munin-plugin - Simple writing of plugins for munin in Rust
 //!
-//! SPDX-License-Identifier: LGPL-3.0-only
-//!
-//! Copyright (C) 2022 Joerg Jaspert <joerg@debian.org>
+//! SPDX-License-Identifier: MIT AND Apache-2.0
+//! Copyright (C) 2022 Joerg Jaspert <joerg@ganneff.de>
 //!
 //! # About
 

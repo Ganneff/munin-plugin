@@ -1,4 +1,7 @@
 //! Config data for a munin plugin
+//! SPDX-License-Identifier: MIT AND Apache-2.0
+//! Copyright (C) 2022 Joerg Jaspert <joerg@ganneff.de>
+//!
 
 // We do not want to write unsafe code
 #![forbid(unsafe_code)]
