@@ -11,7 +11,7 @@ description = "Ease writing of plugins for munin in Rust"
 
 [dependencies]
 anyhow = "1.0.57"
-daemonize = "0.4.1"
+daemonize = "0.5.0"
 fastrand = "1.7.0"
 fs2 = "0.4.3"
 log = "0.4.17"
